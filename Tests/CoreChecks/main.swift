@@ -64,6 +64,31 @@ check("appleScriptEscape escapes double quote",
 check("appleScriptEscape escapes backslash",
       BwocCli.appleScriptEscape("a\\b") == "a\\\\b")
 
+// 4. SessionSnapshot decodes the camelCase shape `bwoc sessions --json` emits (MCC-2).
+let sessionSample = #"""
+{
+  "sessions": [
+    { "agentId": "agent-lisa", "backend": "claude", "lastActivity": "2026-05-28T09:00:00Z", "pid": 100, "source": "marker", "startedAt": "2026-05-28T08:00:00Z", "state": "running", "tmux": null },
+    { "agentId": null, "backend": "claude", "lastActivity": null, "pid": 200, "source": "scan", "startedAt": null, "state": "idle", "tmux": null }
+  ]
+}
+"""#
+
+do {
+    let snap = try JSONDecoder().decode(SessionSnapshot.self, from: Data(sessionSample.utf8))
+    check("SessionSnapshot decodes 2 sessions", snap.sessions.count == 2)
+    let marker = snap.sessions[0]
+    let scan = snap.sessions[1]
+    check("session.pid is Identifiable id", marker.id == 100)
+    check("marker session is not orphan", !marker.isOrphan)
+    check("marker session running", marker.isRunning)
+    check("scan session is orphan", scan.isOrphan)
+    check("scan session agentId is nil", scan.agentId == nil)
+    check("scan session idle is not running", !scan.isRunning)
+} catch {
+    check("SessionSnapshot decodes 2 sessions", false, "\(error)")
+}
+
 if failures.isEmpty {
     print("\nall checks passed")
     exit(0)

@@ -76,6 +76,15 @@ public actor BwocCli {
         }
     }
 
+    public func sessions() async throws -> [Session] {
+        let data = try await capture(args: ["sessions", "--json"])
+        do {
+            return try JSONDecoder().decode(SessionSnapshot.self, from: data).sessions
+        } catch {
+            throw BwocCliError.decodeFailed(String(describing: error))
+        }
+    }
+
     /// Run a non-interactive action (`start` / `stop` / `supervise`) and wait
     /// for it to finish, discarding stdout. Throws on a non-zero exit.
     public func perform(_ action: AgentAction, agent: String) async throws {

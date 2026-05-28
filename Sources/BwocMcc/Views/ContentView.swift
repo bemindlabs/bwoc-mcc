@@ -3,6 +3,7 @@ import BwocMccCore
 
 struct ContentView: View {
     @State private var snapshot: FleetSnapshot? = nil
+    @State private var sessions: [Session] = []
     @State private var lastError: String? = nil
     @State private var isRefreshing = false
     @State private var pendingStop: Agent? = nil
@@ -18,6 +19,10 @@ struct ContentView: View {
                     AgentRow(agent: agent) { action in
                         handle(action, for: agent)
                     }
+                }
+                if !sessions.isEmpty {
+                    Divider()
+                    SessionsSection(sessions: sessions)
                 }
                 Divider()
                 Text(snapshot.workspace)
@@ -120,6 +125,50 @@ struct ContentView: View {
             lastError = nil
         } catch {
             lastError = "bwoc list failed: \(error.localizedDescription)"
+        }
+        // Sessions are supplementary — a failure here shouldn't blank the fleet.
+        if let fresh = try? await BwocCli.shared.sessions() {
+            sessions = fresh
+        }
+    }
+}
+
+private struct SessionsSection: View {
+    let sessions: [Session]
+    @State private var expanded = false
+
+    private var bound: Int { sessions.filter { !$0.isOrphan }.count }
+    private var orphans: Int { sessions.filter(\.isOrphan).count }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(sessions) { session in
+                    HStack(spacing: 6) {
+                        Image(systemName: session.isRunning ? "circle.fill" : "circle")
+                            .font(.system(size: 7))
+                            .foregroundStyle(session.isRunning ? .green : .secondary)
+                        Text(session.agentId ?? "unbound")
+                            .font(.system(.caption2, design: .monospaced))
+                        Text("· \(session.backend) · pid \(session.pid)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(session.source)
+                            .font(.caption2)
+                            .foregroundStyle(session.isOrphan ? .orange : .secondary)
+                    }
+                }
+            }
+            .padding(.top, 2)
+        } label: {
+            HStack {
+                Text("Sessions").font(.caption.bold())
+                Spacer()
+                Text("\(bound) bound\(orphans > 0 ? " · \(orphans) orphan" : "")")
+                    .font(.caption2)
+                    .foregroundStyle(orphans > 0 ? .orange : .secondary)
+            }
         }
     }
 }
