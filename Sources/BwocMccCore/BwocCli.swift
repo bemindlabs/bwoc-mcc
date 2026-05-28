@@ -4,6 +4,7 @@ public enum BwocCliError: Error, CustomStringConvertible {
     case binaryNotFound
     case nonZeroExit(code: Int32, stderr: String)
     case decodeFailed(String)
+    case timedOut(seconds: TimeInterval)
 
     public var description: String {
         switch self {
@@ -13,8 +14,19 @@ public enum BwocCliError: Error, CustomStringConvertible {
             return "bwoc exited \(code): \(stderr.trimmingCharacters(in: .whitespacesAndNewlines))"
         case .decodeFailed(let msg):
             return "decode failed: \(msg)"
+        case .timedOut(let seconds):
+            return "bwoc timed out after \(Int(seconds))s"
         }
     }
+}
+
+/// Thread-safe one-shot flag used to tell `capture()` that its timeout fired
+/// (so it can distinguish a timeout-kill from a normal non-zero exit).
+private final class TimeoutFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+    func set() { lock.lock(); flag = true; lock.unlock() }
+    var isSet: Bool { lock.lock(); defer { lock.unlock() }; return flag }
 }
 
 public enum AgentAction: String, Sendable, CaseIterable {
@@ -218,6 +230,18 @@ public actor BwocCli {
 
         try process.run()
 
+        // Kill a wedged `bwoc` (e.g. blocked on a lock) after a timeout so a UI
+        // action can't hang forever. terminate() closes the child's pipes, which
+        // lets the drains below reach EOF and return.
+        let timedOut = TimeoutFlag()
+        let timeoutTask = Task.detached {
+            try? await Task.sleep(nanoseconds: UInt64(Self.commandTimeout * 1_000_000_000))
+            if process.isRunning {
+                timedOut.set()
+                process.terminate()
+            }
+        }
+
         // Drain both pipes on background threads *while the child runs*. Reading
         // only after waitUntilExit() deadlocks once a command writes past the OS
         // pipe buffer (~64KB): the child blocks on write, we block on wait. The
@@ -228,7 +252,11 @@ public actor BwocCli {
         let err = await errData
 
         process.waitUntilExit()   // pipes are at EOF, so this returns at once
+        timeoutTask.cancel()
 
+        if timedOut.isSet {
+            throw BwocCliError.timedOut(seconds: Self.commandTimeout)
+        }
         if process.terminationStatus != 0 {
             let errStr = String(data: err, encoding: .utf8) ?? ""
             throw BwocCliError.nonZeroExit(code: process.terminationStatus, stderr: errStr)
@@ -236,6 +264,11 @@ public actor BwocCli {
 
         return out
     }
+
+    /// Upper bound for a single non-interactive `bwoc` call. The commands routed
+    /// through capture() (list / sessions / inbox / start / stop) all return in
+    /// well under a second; interactive flows go through Terminal, not here.
+    private static let commandTimeout: TimeInterval = 20
 
     private static func readToEnd(_ handle: FileHandle) async -> Data {
         await withCheckedContinuation { (cont: CheckedContinuation<Data, Never>) in

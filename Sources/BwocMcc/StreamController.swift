@@ -61,7 +61,14 @@ final class StreamController: ObservableObject {
         proc.standardError = pipe
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+            // Empty data == EOF. The read end stays "readable" forever at EOF,
+            // so the dispatch source would spin firing empty callbacks; detach
+            // it here instead of returning and leaving it armed.
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            guard let chunk = String(data: data, encoding: .utf8) else { return }
             Task { @MainActor [weak self] in self?.ingest(chunk) }
         }
         proc.terminationHandler = { [weak self] _ in
