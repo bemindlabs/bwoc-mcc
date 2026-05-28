@@ -177,26 +177,48 @@ private struct AgentRow: View {
     let agent: Agent
     let onAction: (AgentAction) -> Void
 
+    @State private var expanded = false
+    @State private var messages: [InboxMessage] = []
+    @State private var loadingInbox = false
+
     var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(agent.running ? .green : .gray)
-                .frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(agent.id).font(.system(.body, design: .monospaced))
-                Text("\(agent.backend) · \(agent.status)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(agent.running ? .green : .gray)
+                    .frame(width: 8, height: 8)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(agent.id).font(.system(.body, design: .monospaced))
+                    Text("\(agent.backend) · \(agent.status)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                inboxBadge
+                actions
             }
-            Spacer()
-            if agent.inboxCount > 0 {
-                Text("\(agent.inboxCount)")
-                    .font(.caption.monospacedDigit())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(.blue.opacity(0.2)))
+            if expanded {
+                inboxPreview
             }
-            actions
+        }
+    }
+
+    @ViewBuilder
+    private var inboxBadge: some View {
+        if agent.inboxCount > 0 {
+            Button(action: toggleInbox) {
+                HStack(spacing: 3) {
+                    Text("\(agent.inboxCount)")
+                        .font(.caption.monospacedDigit())
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 7))
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(.blue.opacity(0.2)))
+            }
+            .buttonStyle(.plain)
+            .help("Preview inbox")
         }
     }
 
@@ -219,5 +241,58 @@ private struct AgentRow: View {
         }
         .buttonStyle(.borderless)
         .help(help)
+    }
+
+    @ViewBuilder
+    private var inboxPreview: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if loadingInbox {
+                ProgressView().controlSize(.small)
+            } else if messages.isEmpty {
+                Text("No messages").font(.caption2).foregroundStyle(.secondary)
+            } else {
+                ForEach(messages) { msg in
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack {
+                            Text(msg.from).font(.caption2.bold())
+                            Spacer()
+                            Text(Self.age(msg.ts)).font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Text(msg.message)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                Button {
+                    Task { try? await BwocCli.shared.openInTerminal(argv: ["inbox", agent.id, "--watch"]) }
+                } label: {
+                    Label("Watch in Terminal", systemImage: "terminal")
+                        .font(.caption2)
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .padding(.leading, 16)
+    }
+
+    private func toggleInbox() {
+        expanded.toggle()
+        guard expanded, messages.isEmpty else { return }
+        loadingInbox = true
+        Task {
+            defer { loadingInbox = false }
+            if let snap = try? await BwocCli.shared.inbox(agent: agent.id, limit: 3) {
+                messages = snap.messages
+            }
+        }
+    }
+
+    static func age(_ iso: String) -> String {
+        let parser = ISO8601DateFormatter()
+        guard let date = parser.date(from: iso) else { return iso }
+        let rel = RelativeDateTimeFormatter()
+        rel.unitsStyle = .abbreviated
+        return rel.localizedString(for: date, relativeTo: Date())
     }
 }

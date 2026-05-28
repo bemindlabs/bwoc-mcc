@@ -85,6 +85,15 @@ public actor BwocCli {
         }
     }
 
+    public func inbox(agent: String, limit: Int = 3) async throws -> InboxSnapshot {
+        let data = try await capture(args: ["inbox", agent, "--json", "--limit", String(limit)])
+        do {
+            return try JSONDecoder().decode(InboxSnapshot.self, from: data)
+        } catch {
+            throw BwocCliError.decodeFailed(String(describing: error))
+        }
+    }
+
     /// Run a non-interactive action (`start` / `stop` / `supervise`) and wait
     /// for it to finish, discarding stdout. Throws on a non-zero exit.
     public func perform(_ action: AgentAction, agent: String) async throws {
@@ -95,8 +104,14 @@ public actor BwocCli {
     /// Launch an interactive action (`spawn` / `chat`) in Terminal.app — those
     /// flows need a real TTY and can't run inside this process.
     public func openInTerminal(_ action: AgentAction, agent: String) async throws {
+        try await openInTerminal(argv: action.argv(agent: agent))
+    }
+
+    /// Open Terminal.app running `bwoc <argv...>` — for any flow that needs a
+    /// TTY (interactive actions, `inbox --watch`, etc.).
+    public func openInTerminal(argv: [String]) async throws {
         guard let binaryURL else { throw BwocCliError.binaryNotFound }
-        let command = ([binaryURL.path] + action.argv(agent: agent))
+        let command = ([binaryURL.path] + argv)
             .map(Self.shellQuote)
             .joined(separator: " ")
         let script = """

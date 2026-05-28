@@ -89,6 +89,32 @@ do {
     check("SessionSnapshot decodes 2 sessions", false, "\(error)")
 }
 
+// 5. InboxSnapshot decodes `bwoc inbox <agent> --json` (MCC-3).
+let inboxSample = #"""
+{
+  "agent": "agent-jisoo",
+  "inbox": "/ws/agents/agent-jisoo/.bwoc/inbox.jsonl",
+  "messages": [
+    { "from": "agent-lisa", "message": "BWOC-53 done", "messageId": "msg-1", "to": "agent-jisoo", "ts": "2026-05-28T09:36:09Z" }
+  ],
+  "shown": 1,
+  "total": 1
+}
+"""#
+
+do {
+    let snap = try JSONDecoder().decode(InboxSnapshot.self, from: Data(inboxSample.utf8))
+    check("InboxSnapshot decodes agent", snap.agent == "agent-jisoo")
+    check("InboxSnapshot shown/total", snap.shown == 1 && snap.total == 1)
+    check("InboxSnapshot decodes 1 message", snap.messages.count == 1)
+    let m = snap.messages[0]
+    check("message.id maps to messageId", m.id == "msg-1")
+    check("message.from maps", m.from == "agent-lisa")
+    check("message.ts maps", m.ts == "2026-05-28T09:36:09Z")
+} catch {
+    check("InboxSnapshot decodes 1 message", false, "\(error)")
+}
+
 if failures.isEmpty {
     print("\nall checks passed")
     exit(0)
