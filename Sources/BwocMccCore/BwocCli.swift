@@ -43,9 +43,24 @@ public enum AgentAction: String, Sendable, CaseIterable {
         }
     }
 
-    /// `bwoc <verb> <agent>` argument vector for this action.
-    public func argv(agent: String) -> [String] {
-        [rawValue, agent]
+    /// Argument vector for this action. `spawn` targets the agent directory
+    /// by `--path`; the others take the agent name plus an explicit
+    /// `--workspace` so the command resolves correctly even when launched from
+    /// outside the workspace tree (e.g. Terminal opening at $HOME).
+    public func argv(agent: Agent, workspace: String?) -> [String] {
+        switch self {
+        case .spawn:
+            let dir = workspace.map { "\($0)/\(agent.path)" } ?? agent.path
+            return ["spawn", "--path", dir]
+        case .chat:
+            return ["chat", agent.id] + Self.workspaceFlag(workspace)
+        case .start, .stop, .supervise:
+            return [rawValue, agent.id] + Self.workspaceFlag(workspace)
+        }
+    }
+
+    static func workspaceFlag(_ workspace: String?) -> [String] {
+        workspace.map { ["--workspace", $0] } ?? []
     }
 }
 
@@ -61,6 +76,12 @@ public actor BwocCli {
 
     private let binaryURL: URL?
 
+    /// Learned from the first successful `list()` and then passed as
+    /// `--workspace` to every subsequent command, so actions resolve the right
+    /// workspace even when the host process (or a spawned Terminal) has a cwd
+    /// outside the workspace tree.
+    private var cachedWorkspace: String? = nil
+
     public init() {
         self.binaryURL = Self.candidatePaths
             .map(URL.init(fileURLWithPath:))
@@ -68,16 +89,18 @@ public actor BwocCli {
     }
 
     public func list() async throws -> FleetSnapshot {
-        let data = try await capture(args: ["list", "--json"])
+        let data = try await capture(args: withWorkspace(["list", "--json"]))
         do {
-            return try JSONDecoder().decode(FleetSnapshot.self, from: data)
+            let snapshot = try JSONDecoder().decode(FleetSnapshot.self, from: data)
+            cachedWorkspace = snapshot.workspace
+            return snapshot
         } catch {
             throw BwocCliError.decodeFailed(String(describing: error))
         }
     }
 
     public func sessions() async throws -> [Session] {
-        let data = try await capture(args: ["sessions", "--json"])
+        let data = try await capture(args: withWorkspace(["sessions", "--json"]))
         do {
             return try JSONDecoder().decode(SessionSnapshot.self, from: data).sessions
         } catch {
@@ -86,7 +109,7 @@ public actor BwocCli {
     }
 
     public func inbox(agent: String, limit: Int = 3) async throws -> InboxSnapshot {
-        let data = try await capture(args: ["inbox", agent, "--json", "--limit", String(limit)])
+        let data = try await capture(args: withWorkspace(["inbox", agent, "--json", "--limit", String(limit)]))
         do {
             return try JSONDecoder().decode(InboxSnapshot.self, from: data)
         } catch {
@@ -96,20 +119,30 @@ public actor BwocCli {
 
     /// Run a non-interactive action (`start` / `stop` / `supervise`) and wait
     /// for it to finish, discarding stdout. Throws on a non-zero exit.
-    public func perform(_ action: AgentAction, agent: String) async throws {
+    public func perform(_ action: AgentAction, agent: Agent) async throws {
         precondition(!action.isInteractive, "use openInTerminal for interactive actions")
-        _ = try await capture(args: action.argv(agent: agent))
+        _ = try await capture(args: action.argv(agent: agent, workspace: cachedWorkspace))
     }
 
     /// Launch an interactive action (`spawn` / `chat`) in Terminal.app — those
     /// flows need a real TTY and can't run inside this process.
-    public func openInTerminal(_ action: AgentAction, agent: String) async throws {
-        try await openInTerminal(argv: action.argv(agent: agent))
+    public func openInTerminal(_ action: AgentAction, agent: Agent) async throws {
+        try await openInTerminal(argv: action.argv(agent: agent, workspace: cachedWorkspace))
+    }
+
+    /// Open `bwoc inbox <agent> --watch` in Terminal.app, workspace-qualified.
+    public func openInboxWatch(agent: String) async throws {
+        try await openInTerminal(argv: withWorkspace(["inbox", agent, "--watch"]))
+    }
+
+    private func withWorkspace(_ args: [String]) -> [String] {
+        guard let cachedWorkspace else { return args }
+        return args + ["--workspace", cachedWorkspace]
     }
 
     /// Open Terminal.app running `bwoc <argv...>` — for any flow that needs a
     /// TTY (interactive actions, `inbox --watch`, etc.).
-    public func openInTerminal(argv: [String]) async throws {
+    private func openInTerminal(argv: [String]) async throws {
         guard let binaryURL else { throw BwocCliError.binaryNotFound }
         let command = ([binaryURL.path] + argv)
             .map(Self.shellQuote)

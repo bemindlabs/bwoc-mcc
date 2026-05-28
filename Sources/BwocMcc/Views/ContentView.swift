@@ -110,9 +110,9 @@ struct ContentView: View {
     private func runAction(_ action: AgentAction, for agent: Agent) async {
         do {
             if action.isInteractive {
-                try await BwocCli.shared.openInTerminal(action, agent: agent.id)
+                try await BwocCli.shared.openInTerminal(action, agent: agent)
             } else {
-                try await BwocCli.shared.perform(action, agent: agent.id)
+                try await BwocCli.shared.perform(action, agent: agent)
                 await refresh()
             }
             lastError = nil
@@ -309,7 +309,7 @@ private struct AgentRow: View {
                     }
                 }
                 Button {
-                    Task { try? await BwocCli.shared.openInTerminal(argv: ["inbox", agent.id, "--watch"]) }
+                    Task { try? await BwocCli.shared.openInboxWatch(agent: agent.id) }
                 } label: {
                     Label("Watch in Terminal", systemImage: "terminal")
                         .font(.caption2)

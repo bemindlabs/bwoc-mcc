@@ -51,8 +51,18 @@ check("chat is interactive", AgentAction.chat.isInteractive)
 check("start is non-interactive", !AgentAction.start.isInteractive)
 check("stop is non-interactive", !AgentAction.stop.isInteractive)
 check("supervise is non-interactive", !AgentAction.supervise.isInteractive)
-check("stop argv maps to [stop, agent]", AgentAction.stop.argv(agent: "agent-rose") == ["stop", "agent-rose"])
-check("start argv maps to [start, agent]", AgentAction.start.argv(agent: "agent-lisa") == ["start", "agent-lisa"])
+// argv is workspace-aware: name actions take `--workspace`, spawn takes `--path`.
+let argvAgent = try JSONDecoder().decode(FleetSnapshot.self, from: Data(sample.utf8)).agents[0]
+check("stop argv carries --workspace",
+      AgentAction.stop.argv(agent: argvAgent, workspace: "/ws") == ["stop", "agent-jisoo", "--workspace", "/ws"])
+check("chat argv carries --workspace",
+      AgentAction.chat.argv(agent: argvAgent, workspace: "/ws") == ["chat", "agent-jisoo", "--workspace", "/ws"])
+check("spawn argv targets agent dir via --path",
+      AgentAction.spawn.argv(agent: argvAgent, workspace: "/ws") == ["spawn", "--path", "/ws/agents/agent-jisoo"])
+check("nil workspace omits --workspace flag",
+      AgentAction.stop.argv(agent: argvAgent, workspace: nil) == ["stop", "agent-jisoo"])
+check("spawn with nil workspace falls back to relative path",
+      AgentAction.spawn.argv(agent: argvAgent, workspace: nil) == ["spawn", "--path", "agents/agent-jisoo"])
 
 // 3. Shell/AppleScript escaping guards (MCC-1) — quoting must neutralize
 //    embedded quotes so a crafted agent id cannot break out of the command.
