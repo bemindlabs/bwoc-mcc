@@ -11,7 +11,7 @@ struct ContentView: View {
     @State private var isRefreshing = false
     @State private var pendingStop: Agent? = nil
 
-    private let refreshInterval: TimeInterval = 5
+    @AppStorage("refreshInterval") private var refreshInterval: Double = 5
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -62,6 +62,10 @@ struct ContentView: View {
                 Button("Quit") { NSApp.terminate(nil) }
                     .keyboardShortcut("q")
                 Spacer()
+                Button(action: openSettings) {
+                    Image(systemName: "gearshape")
+                }
+                .help("Settings")
                 Button(action: { Task { await refresh() } }) {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -109,8 +113,25 @@ struct ContentView: View {
         }
     }
 
+    private func openSettings() {
+        // No app menu in an accessory app, so Cmd-, has nothing to trigger —
+        // open the Settings scene via AppKit's (version-specific) selector.
+        if #available(macOS 14, *) {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        } else {
+            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func openDetail(_ agent: Agent) {
-        openWindow(id: "agent-detail", value: agent.id)
+        // Reuse an already-open detail window (titled with the agent id) rather
+        // than spawning a duplicate with its own stream.
+        if let existing = NSApp.windows.first(where: { $0.title == agent.id }) {
+            existing.makeKeyAndOrderFront(nil)
+        } else {
+            openWindow(id: "agent-detail", value: agent.id)
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -321,6 +342,7 @@ private struct AgentRow: View {
             actionButton(.chat, help: "Open chat in Terminal")
             if agent.running {
                 actionButton(.stop, help: "Stop agent")
+                actionButton(.supervise, help: "Supervise in Terminal (restart on crash)")
             } else {
                 actionButton(.start, help: "Start agent")
                 actionButton(.spawn, help: "Spawn in Terminal")

@@ -50,7 +50,9 @@ check("spawn is interactive", AgentAction.spawn.isInteractive)
 check("chat is interactive", AgentAction.chat.isInteractive)
 check("start is non-interactive", !AgentAction.start.isInteractive)
 check("stop is non-interactive", !AgentAction.stop.isInteractive)
-check("supervise is non-interactive", !AgentAction.supervise.isInteractive)
+// supervise is a foreground daemon loop — must be interactive so it never
+// blocks the in-process actor.
+check("supervise is interactive", AgentAction.supervise.isInteractive)
 // argv is workspace-aware: name actions take `--workspace`, spawn takes `--path`.
 let argvAgent = try JSONDecoder().decode(FleetSnapshot.self, from: Data(sample.utf8)).agents[0]
 check("stop argv carries --workspace",
@@ -172,6 +174,22 @@ setenv("BWOC_WORKSPACE", "/tmp/seeded-ws", 1)
 let seeded = await BwocCli().currentWorkspace()
 check("BWOC_WORKSPACE seeds cachedWorkspace at init", seeded == "/tmp/seeded-ws")
 unsetenv("BWOC_WORKSPACE")
+
+// 11. Actor threads the cached workspace into stream argv (MCC-9).
+let wsCli = BwocCli()
+await wsCli.setWorkspace("/ws")
+let streamArgs = await wsCli.streamArgv(.inbox, agent: "agent-x")
+check("streamArgv carries --workspace after setWorkspace",
+      streamArgs == ["inbox", "agent-x", "--watch", "--workspace", "/ws"])
+
+// 12. Agent decodes when optional fields are absent (forward-compat, MCC-9).
+let leanAgent = #"{"id":"agent-z","backend":"claude","status":"active","running":true,"inbox_count":0,"path":"agents/agent-z"}"#
+do {
+    let a = try JSONDecoder().decode(Agent.self, from: Data(leanAgent.utf8))
+    check("Agent decodes without uptime/incarnated", a.id == "agent-z" && a.uptimeSeconds == nil && a.incarnated == nil)
+} catch {
+    check("Agent decodes without uptime/incarnated", false, "\(error)")
+}
 
 if failures.isEmpty {
     print("\nall checks passed")

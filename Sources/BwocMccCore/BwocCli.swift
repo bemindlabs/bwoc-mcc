@@ -25,11 +25,13 @@ public enum AgentAction: String, Sendable, CaseIterable {
     case supervise
 
     /// Interactive flows need a real TTY, so they launch in Terminal.app
-    /// rather than running inside the app's process.
+    /// rather than running inside the app's process. `supervise` is a
+    /// foreground daemon loop — running it via the in-process capture() would
+    /// block the actor forever, so it must be interactive too.
     public var isInteractive: Bool {
         switch self {
-        case .spawn, .chat: return true
-        case .start, .stop, .supervise: return false
+        case .spawn, .chat, .supervise: return true
+        case .start, .stop: return false
         }
     }
 
@@ -52,9 +54,7 @@ public enum AgentAction: String, Sendable, CaseIterable {
         case .spawn:
             let dir = workspace.map { "\($0)/\(agent.path)" } ?? agent.path
             return ["spawn", "--path", dir]
-        case .chat:
-            return ["chat", agent.id] + Self.workspaceFlag(workspace)
-        case .start, .stop, .supervise:
+        case .chat, .start, .stop, .supervise:
             return [rawValue, agent.id] + Self.workspaceFlag(workspace)
         }
     }
@@ -83,9 +83,14 @@ public actor BwocCli {
     private var cachedWorkspace: String? = nil
 
     static let workspaceDefaultsKey = "bwoc.workspacePath"
+    public static let binaryDefaultsKey = "bwoc.binaryPath"
 
     public init() {
-        self.binaryURL = Self.candidatePaths
+        // A user-set override (Settings) wins over the built-in candidates.
+        let override = UserDefaults.standard.string(forKey: Self.binaryDefaultsKey)
+            .flatMap { $0.isEmpty ? nil : $0 }
+        let candidates = (override.map { [$0] } ?? []) + Self.candidatePaths
+        self.binaryURL = candidates
             .map(URL.init(fileURLWithPath:))
             .first { FileManager.default.isExecutableFile(atPath: $0.path) }
         // Seed the workspace so the very first `list()` resolves even when cwd
