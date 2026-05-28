@@ -6,8 +6,10 @@ struct BwocMccApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("BWOC", systemImage: "person.3.sequence") {
+        MenuBarExtra {
             ContentView()
+        } label: {
+            Image(nsImage: LotusIcon.image)
         }
         .menuBarExtraStyle(.window)
 
@@ -18,9 +20,14 @@ struct BwocMccApp: App {
         }
         .defaultSize(width: 620, height: 460)
 
-        Settings {
+        // A plain Window (not the SwiftUI `Settings` scene) — an `.accessory`
+        // app has no main menu, so the Settings scene can't be summoned. This
+        // opens reliably via openWindow + NSApp.activate, same as agent-detail.
+        Window("BWOC Settings", id: "settings") {
             SettingsView()
         }
+        .defaultSize(width: 400, height: 340)
+        .windowResizability(.contentSize)
     }
 }
 

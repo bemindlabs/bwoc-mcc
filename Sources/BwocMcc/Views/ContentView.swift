@@ -62,7 +62,10 @@ struct ContentView: View {
                 Button("Quit") { NSApp.terminate(nil) }
                     .keyboardShortcut("q")
                 Spacer()
-                Button(action: openSettings) {
+                Button {
+                    openWindow(id: "settings")
+                    NSApp.activate(ignoringOtherApps: true)
+                } label: {
                     Image(systemName: "gearshape")
                 }
                 .help("Settings")
@@ -111,17 +114,6 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private func openSettings() {
-        // No app menu in an accessory app, so Cmd-, has nothing to trigger —
-        // open the Settings scene via AppKit's (version-specific) selector.
-        if #available(macOS 14, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func openDetail(_ agent: Agent) {
