@@ -10,6 +10,13 @@ struct BwocMccApp: App {
             ContentView()
         }
         .menuBarExtraStyle(.window)
+
+        WindowGroup(id: "agent-detail", for: String.self) { $agentId in
+            if let agentId {
+                AgentDetailWindow(agentId: agentId)
+            }
+        }
+        .defaultSize(width: 620, height: 460)
     }
 }
 

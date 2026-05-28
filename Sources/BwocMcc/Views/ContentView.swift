@@ -2,6 +2,8 @@ import SwiftUI
 import BwocMccCore
 
 struct ContentView: View {
+    @Environment(\.openWindow) private var openWindow
+
     @State private var snapshot: FleetSnapshot? = nil
     @State private var sessions: [Session] = []
     @State private var scrum: ScrumState? = nil
@@ -20,7 +22,11 @@ struct ContentView: View {
             Divider()
             if let snapshot {
                 ForEach(snapshot.agents) { agent in
-                    AgentRow(agent: agent, blocked: scrum?.blockedAgents.contains(agent.id) ?? false) { action in
+                    AgentRow(
+                        agent: agent,
+                        blocked: scrum?.blockedAgents.contains(agent.id) ?? false,
+                        onOpenDetail: { openDetail(agent) }
+                    ) { action in
                         handle(action, for: agent)
                     }
                 }
@@ -97,6 +103,11 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func openDetail(_ agent: Agent) {
+        openWindow(id: "agent-detail", value: agent.id)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func handle(_ action: AgentAction, for agent: Agent) {
@@ -213,6 +224,7 @@ private struct SessionsSection: View {
 private struct AgentRow: View {
     let agent: Agent
     var blocked: Bool = false
+    var onOpenDetail: () -> Void = {}
     let onAction: (AgentAction) -> Void
 
     @State private var expanded = false
@@ -269,6 +281,11 @@ private struct AgentRow: View {
     @ViewBuilder
     private var actions: some View {
         HStack(spacing: 2) {
+            Button(action: onOpenDetail) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+            }
+            .buttonStyle(.borderless)
+            .help("Stream inbox + log")
             actionButton(.chat, help: "Open chat in Terminal")
             if agent.running {
                 actionButton(.stop, help: "Stop agent")

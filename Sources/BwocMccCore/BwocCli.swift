@@ -135,6 +135,15 @@ public actor BwocCli {
         try await openInTerminal(argv: withWorkspace(["inbox", agent, "--watch"]))
     }
 
+    /// Resolved `bwoc` binary path, for callers that spawn their own process
+    /// (e.g. the streaming detail window).
+    public func binaryPath() -> String? { binaryURL?.path }
+
+    /// Workspace-qualified argv for a long-running stream.
+    public func streamArgv(_ kind: StreamKind, agent: String) -> [String] {
+        withWorkspace(kind.argv(agent: agent))
+    }
+
     private func withWorkspace(_ args: [String]) -> [String] {
         guard let cachedWorkspace else { return args }
         return args + ["--workspace", cachedWorkspace]

@@ -153,6 +153,20 @@ let fixedNow = ISO8601DateFormatter().date(from: "2026-05-30T12:00:00Z")!
 check("daysUntil future date", ScrumReader.daysUntil("2026-06-04", now: fixedNow) == 5)
 check("daysUntil malformed returns nil", ScrumReader.daysUntil("not-a-date") == nil)
 
+// 8. LineBuffer splits an incremental stream on newlines (MCC-6).
+var lb = LineBuffer()
+check("complete lines split immediately", lb.append("a\nb\n") == ["a", "b"])
+check("partial line withheld until newline", lb.append("par") == [])
+check("partial completes on next chunk", lb.append("tial\nnext\n") == ["partial", "next"])
+check("flush returns trailing fragment", { lb.append("tail"); return lb.flush() }() == "tail")
+check("flush is empty after drain", lb.flush() == nil)
+var lb2 = LineBuffer()
+check("blank lines preserved", lb2.append("\n\nx\n") == ["", "", "x"])
+
+// 9. StreamKind argv (MCC-6).
+check("inbox stream argv", StreamKind.inbox.argv(agent: "agent-lisa") == ["inbox", "agent-lisa", "--watch"])
+check("log stream argv", StreamKind.log.argv(agent: "agent-lisa") == ["log", "agent-lisa", "-f"])
+
 if failures.isEmpty {
     print("\nall checks passed")
     exit(0)
