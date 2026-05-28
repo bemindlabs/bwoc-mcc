@@ -115,6 +115,34 @@ do {
     check("InboxSnapshot decodes 1 message", false, "\(error)")
 }
 
+// 6. ScrumReader.compute derives points + blocked agents (MCC-4).
+let scrumItems = [
+    ScrumStory(id: "MCC-1", status: "done", owner: "agent-lisa", sprint: "sprint-8", points: 5, blockedBy: []),
+    ScrumStory(id: "MCC-2", status: "done", owner: "agent-lisa", sprint: "sprint-8", points: 3, blockedBy: []),
+    ScrumStory(id: "MCC-3", status: "backlog", owner: "agent-lisa", sprint: "sprint-8", points: 3, blockedBy: []),
+    // MCC-5 is open and blocked by MCC-3 (still open) -> owner is blocked.
+    ScrumStory(id: "MCC-5", status: "backlog", owner: "agent-rose", sprint: "sprint-8", points: 8, blockedBy: ["MCC-3"]),
+    // A story blocked only by a DONE story is NOT blocked.
+    ScrumStory(id: "MCC-9", status: "backlog", owner: "agent-jennie", sprint: "sprint-8", points: 2, blockedBy: ["MCC-1"]),
+]
+let scrumState = ScrumReader.compute(
+    sprintId: "sprint-8",
+    endDate: "2026-06-04",
+    committedPoints: 22,
+    items: scrumItems,
+    now: ISO8601DateFormatter().date(from: "2026-05-30T00:00:00Z")!
+)
+check("pointsDone sums only done-in-sprint", scrumState.pointsDone == 8)
+check("pointsCommitted from sprint file", scrumState.pointsCommitted == 22)
+check("agent blocked by open blocker", scrumState.blockedAgents.contains("agent-rose"))
+check("agent NOT blocked when blocker is done", !scrumState.blockedAgents.contains("agent-jennie"))
+check("done story owner not flagged blocked", !scrumState.blockedAgents.contains("agent-lisa"))
+
+// 7. daysUntil date math (MCC-4).
+let fixedNow = ISO8601DateFormatter().date(from: "2026-05-30T12:00:00Z")!
+check("daysUntil future date", ScrumReader.daysUntil("2026-06-04", now: fixedNow) == 5)
+check("daysUntil malformed returns nil", ScrumReader.daysUntil("not-a-date") == nil)
+
 if failures.isEmpty {
     print("\nall checks passed")
     exit(0)

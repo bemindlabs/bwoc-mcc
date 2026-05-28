@@ -4,6 +4,7 @@ import BwocMccCore
 struct ContentView: View {
     @State private var snapshot: FleetSnapshot? = nil
     @State private var sessions: [Session] = []
+    @State private var scrum: ScrumState? = nil
     @State private var lastError: String? = nil
     @State private var isRefreshing = false
     @State private var pendingStop: Agent? = nil
@@ -13,10 +14,13 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
+            if let scrum {
+                ScrumStrip(state: scrum)
+            }
             Divider()
             if let snapshot {
                 ForEach(snapshot.agents) { agent in
-                    AgentRow(agent: agent) { action in
+                    AgentRow(agent: agent, blocked: scrum?.blockedAgents.contains(agent.id) ?? false) { action in
                         handle(action, for: agent)
                     }
                 }
@@ -130,6 +134,39 @@ struct ContentView: View {
         if let fresh = try? await BwocCli.shared.sessions() {
             sessions = fresh
         }
+        if let ws = snapshot?.workspace {
+            scrum = ScrumReader.read(workspace: ws)
+        }
+    }
+}
+
+private struct ScrumStrip: View {
+    let state: ScrumState
+
+    private var daysText: String {
+        guard let d = state.daysLeft else { return "" }
+        if d < 0 { return "overdue" }
+        if d == 0 { return "last day" }
+        return "\(d)d left"
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "flag.checkered")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(state.sprintId)
+                .font(.caption.bold())
+            if !daysText.isEmpty {
+                Text("· \(daysText)")
+                    .font(.caption2)
+                    .foregroundStyle((state.daysLeft ?? 1) <= 0 ? .orange : .secondary)
+            }
+            Spacer()
+            Text("\(state.pointsDone)/\(state.pointsCommitted) pts")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -175,6 +212,7 @@ private struct SessionsSection: View {
 
 private struct AgentRow: View {
     let agent: Agent
+    var blocked: Bool = false
     let onAction: (AgentAction) -> Void
 
     @State private var expanded = false
@@ -192,6 +230,12 @@ private struct AgentRow: View {
                     Text("\(agent.backend) · \(agent.status)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                }
+                if blocked {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.yellow)
+                        .help("Owns a story with an open blocker")
                 }
                 Spacer()
                 inboxBadge
