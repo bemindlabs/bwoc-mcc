@@ -76,6 +76,15 @@ public enum AgentAction: String, Sendable, CaseIterable {
     }
 }
 
+/// Terminal emulator used for interactive flows. Terminal and iTerm speak
+/// different AppleScript dialects, so the choice drives which script is sent.
+public enum TerminalApp: String, CaseIterable, Sendable {
+    case terminal = "Terminal"
+    case iterm = "iTerm"
+
+    public static let defaultsKey = "bwoc.terminalApp"
+}
+
 public actor BwocCli {
     public static let shared = BwocCli()
 
@@ -182,29 +191,51 @@ public actor BwocCli {
         return args + ["--workspace", cachedWorkspace]
     }
 
-    /// Open Terminal.app running `bwoc <argv...>` — for any flow that needs a
-    /// TTY (interactive actions, `inbox --watch`, etc.).
+    /// Open the chosen terminal running `bwoc <argv...>` — for any flow that
+    /// needs a TTY (interactive actions, `inbox --watch`, etc.).
     private func openInTerminal(argv: [String]) async throws {
         guard let binaryURL else { throw BwocCliError.binaryNotFound }
         let command = ([binaryURL.path] + argv)
             .map(Self.shellQuote)
             .joined(separator: " ")
-        let script = """
-        tell application "Terminal"
-            activate
-            do script "\(Self.appleScriptEscape(command))"
-        end tell
-        """
+        let app = TerminalApp(rawValue: UserDefaults.standard.string(forKey: TerminalApp.defaultsKey) ?? "") ?? .terminal
+        let script = Self.terminalScript(app, command: command)
+
         let osa = Process()
         osa.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         osa.arguments = ["-e", script]
         let err = Pipe()
         osa.standardError = err
         try osa.run()
+        // Drain stderr while osascript runs — same pipe-deadlock guard as capture().
+        async let errData = Self.readToEnd(err.fileHandleForReading)
+        let errOut = await errData
         osa.waitUntilExit()
         if osa.terminationStatus != 0 {
-            let errStr = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let errStr = String(data: errOut, encoding: .utf8) ?? ""
             throw BwocCliError.nonZeroExit(code: osa.terminationStatus, stderr: errStr)
+        }
+    }
+
+    /// AppleScript that opens `command` in `app`. Terminal and iTerm use
+    /// different verbs to spawn a window+command, so each has its own template.
+    public static func terminalScript(_ app: TerminalApp, command: String) -> String {
+        let escaped = appleScriptEscape(command)
+        switch app {
+        case .terminal:
+            return """
+            tell application "Terminal"
+                activate
+                do script "\(escaped)"
+            end tell
+            """
+        case .iterm:
+            return """
+            tell application "iTerm"
+                activate
+                create window with default profile command "\(escaped)"
+            end tell
+            """
         }
     }
 

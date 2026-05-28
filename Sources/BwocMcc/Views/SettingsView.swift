@@ -5,6 +5,7 @@ import BwocMccCore
 struct SettingsView: View {
     @AppStorage("refreshInterval") private var refreshInterval: Double = 5
     @AppStorage(BwocCli.binaryDefaultsKey) private var binaryOverride: String = ""
+    @AppStorage(TerminalApp.defaultsKey) private var terminalApp: String = TerminalApp.terminal.rawValue
 
     @State private var workspace: String = ""
     @State private var resolvedBinary: String = ""
@@ -26,6 +27,16 @@ struct SettingsView: View {
                     Button("Choose…") { chooseWorkspace() }
                 }
                 Text("Passed as --workspace to every bwoc command.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Terminal") {
+                Picker("Open actions in", selection: $terminalApp) {
+                    ForEach(TerminalApp.allCases, id: \.rawValue) { app in
+                        Text(app.rawValue).tag(app.rawValue)
+                    }
+                }
+                Text("Where spawn / chat / supervise / inbox-watch open.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

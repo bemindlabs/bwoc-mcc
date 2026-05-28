@@ -76,6 +76,18 @@ check("appleScriptEscape escapes double quote",
 check("appleScriptEscape escapes backslash",
       BwocCli.appleScriptEscape("a\\b") == "a\\\\b")
 
+// 3b. terminalScript picks the right dialect per terminal app and escapes the
+//     command (no longer hardcoded to Terminal.app).
+let termScript = BwocCli.terminalScript(.terminal, command: "echo hi")
+check("terminalScript Terminal uses do-script dialect",
+      termScript.contains(#"tell application "Terminal""#) && termScript.contains(#"do script "echo hi""#))
+let itermScript = BwocCli.terminalScript(.iterm, command: "echo hi")
+check("terminalScript iTerm uses create-window dialect",
+      itermScript.contains(#"tell application "iTerm""#) && itermScript.contains(#"create window with default profile command "echo hi""#))
+check("terminalScript escapes embedded double quotes",
+      BwocCli.terminalScript(.terminal, command: "say \"hi\"").contains(#"say \"hi\""#))
+check("TerminalApp parses its rawValue", TerminalApp(rawValue: "iTerm") == .iterm)
+
 // 4. SessionSnapshot decodes the camelCase shape `bwoc sessions --json` emits (MCC-2).
 let sessionSample = #"""
 {
