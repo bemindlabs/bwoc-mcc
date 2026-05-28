@@ -45,6 +45,25 @@ do {
     check("FleetSnapshot decodes 1 agent", false, "\(error)")
 }
 
+// 2. AgentAction interactivity + argv mapping (MCC-1).
+check("spawn is interactive", AgentAction.spawn.isInteractive)
+check("chat is interactive", AgentAction.chat.isInteractive)
+check("start is non-interactive", !AgentAction.start.isInteractive)
+check("stop is non-interactive", !AgentAction.stop.isInteractive)
+check("supervise is non-interactive", !AgentAction.supervise.isInteractive)
+check("stop argv maps to [stop, agent]", AgentAction.stop.argv(agent: "agent-rose") == ["stop", "agent-rose"])
+check("start argv maps to [start, agent]", AgentAction.start.argv(agent: "agent-lisa") == ["start", "agent-lisa"])
+
+// 3. Shell/AppleScript escaping guards (MCC-1) — quoting must neutralize
+//    embedded quotes so a crafted agent id cannot break out of the command.
+check("shellQuote wraps in single quotes", BwocCli.shellQuote("agent-rose") == "'agent-rose'")
+check("shellQuote neutralizes embedded single quote",
+      BwocCli.shellQuote("a'b") == "'a'\\''b'")
+check("appleScriptEscape escapes double quote",
+      BwocCli.appleScriptEscape("say \"hi\"") == "say \\\"hi\\\"")
+check("appleScriptEscape escapes backslash",
+      BwocCli.appleScriptEscape("a\\b") == "a\\\\b")
+
 if failures.isEmpty {
     print("\nall checks passed")
     exit(0)

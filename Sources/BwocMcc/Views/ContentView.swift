@@ -5,6 +5,7 @@ struct ContentView: View {
     @State private var snapshot: FleetSnapshot? = nil
     @State private var lastError: String? = nil
     @State private var isRefreshing = false
+    @State private var pendingStop: Agent? = nil
 
     private let refreshInterval: TimeInterval = 5
 
@@ -14,7 +15,9 @@ struct ContentView: View {
             Divider()
             if let snapshot {
                 ForEach(snapshot.agents) { agent in
-                    AgentRow(agent: agent)
+                    AgentRow(agent: agent) { action in
+                        handle(action, for: agent)
+                    }
                 }
                 Divider()
                 Text(snapshot.workspace)
@@ -29,6 +32,12 @@ struct ContentView: View {
             } else {
                 ProgressView().controlSize(.small)
             }
+            if let lastError, snapshot != nil {
+                Text(lastError)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            }
             Divider()
             HStack {
                 Button("Quit") { NSApp.terminate(nil) }
@@ -42,6 +51,23 @@ struct ContentView: View {
         }
         .padding(12)
         .frame(width: 360)
+        .confirmationDialog(
+            "Stop \(pendingStop?.id ?? "")?",
+            isPresented: Binding(
+                get: { pendingStop != nil },
+                set: { if !$0 { pendingStop = nil } }
+            ),
+            presenting: pendingStop
+        ) { agent in
+            Button("Stop — \(agent.inboxCount) unread message\(agent.inboxCount == 1 ? "" : "s")", role: .destructive) {
+                let target = agent
+                pendingStop = nil
+                Task { await runAction(.stop, for: target) }
+            }
+            Button("Cancel", role: .cancel) { pendingStop = nil }
+        } message: { agent in
+            Text("\(agent.id) has \(agent.inboxCount) unread message\(agent.inboxCount == 1 ? "" : "s"). Stopping now leaves them undrained.")
+        }
         .task {
             await refresh()
             while !Task.isCancelled {
@@ -64,6 +90,28 @@ struct ContentView: View {
         }
     }
 
+    private func handle(_ action: AgentAction, for agent: Agent) {
+        if action == .stop && agent.inboxCount > 0 {
+            pendingStop = agent
+            return
+        }
+        Task { await runAction(action, for: agent) }
+    }
+
+    private func runAction(_ action: AgentAction, for agent: Agent) async {
+        do {
+            if action.isInteractive {
+                try await BwocCli.shared.openInTerminal(action, agent: agent.id)
+            } else {
+                try await BwocCli.shared.perform(action, agent: agent.id)
+                await refresh()
+            }
+            lastError = nil
+        } catch {
+            lastError = "\(action.rawValue) \(agent.id) failed: \(error.localizedDescription)"
+        }
+    }
+
     private func refresh() async {
         isRefreshing = true
         defer { isRefreshing = false }
@@ -78,6 +126,7 @@ struct ContentView: View {
 
 private struct AgentRow: View {
     let agent: Agent
+    let onAction: (AgentAction) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -98,6 +147,28 @@ private struct AgentRow: View {
                     .padding(.vertical, 1)
                     .background(Capsule().fill(.blue.opacity(0.2)))
             }
+            actions
         }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        HStack(spacing: 2) {
+            actionButton(.chat, help: "Open chat in Terminal")
+            if agent.running {
+                actionButton(.stop, help: "Stop agent")
+            } else {
+                actionButton(.start, help: "Start agent")
+                actionButton(.spawn, help: "Spawn in Terminal")
+            }
+        }
+    }
+
+    private func actionButton(_ action: AgentAction, help: String) -> some View {
+        Button(action: { onAction(action) }) {
+            Image(systemName: action.systemImage)
+        }
+        .buttonStyle(.borderless)
+        .help(help)
     }
 }
