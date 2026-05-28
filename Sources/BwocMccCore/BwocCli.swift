@@ -82,10 +82,26 @@ public actor BwocCli {
     /// outside the workspace tree.
     private var cachedWorkspace: String? = nil
 
+    static let workspaceDefaultsKey = "bwoc.workspacePath"
+
     public init() {
         self.binaryURL = Self.candidatePaths
             .map(URL.init(fileURLWithPath:))
             .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        // Seed the workspace so the very first `list()` resolves even when cwd
+        // is outside the tree (e.g. a double-clicked .app, cwd = "/"). Falls
+        // back to ancestor-walk when neither source is set (dev / cwd inside).
+        self.cachedWorkspace = ProcessInfo.processInfo.environment["BWOC_WORKSPACE"]
+            ?? UserDefaults.standard.string(forKey: Self.workspaceDefaultsKey)
+    }
+
+    public func currentWorkspace() -> String? { cachedWorkspace }
+
+    /// Pin the workspace explicitly (e.g. from a folder picker) and persist it
+    /// so the next launch resolves without cwd dependence.
+    public func setWorkspace(_ path: String) {
+        cachedWorkspace = path
+        UserDefaults.standard.set(path, forKey: Self.workspaceDefaultsKey)
     }
 
     public func list() async throws -> FleetSnapshot {

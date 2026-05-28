@@ -167,6 +167,12 @@ check("blank lines preserved", lb2.append("\n\nx\n") == ["", "", "x"])
 check("inbox stream argv", StreamKind.inbox.argv(agent: "agent-lisa") == ["inbox", "agent-lisa", "--watch"])
 check("log stream argv", StreamKind.log.argv(agent: "agent-lisa") == ["log", "agent-lisa", "-f"])
 
+// 10. BwocCli seeds workspace from BWOC_WORKSPACE before any list() (MCC-7).
+setenv("BWOC_WORKSPACE", "/tmp/seeded-ws", 1)
+let seeded = await BwocCli().currentWorkspace()
+check("BWOC_WORKSPACE seeds cachedWorkspace at init", seeded == "/tmp/seeded-ws")
+unsetenv("BWOC_WORKSPACE")
+
 if failures.isEmpty {
     print("\nall checks passed")
     exit(0)

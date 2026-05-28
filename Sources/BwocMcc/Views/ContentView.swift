@@ -41,9 +41,13 @@ struct ContentView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             } else if let lastError {
-                Text(lastError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(lastError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    Button("Set workspace…") { chooseWorkspace() }
+                        .controlSize(.small)
+                }
             } else {
                 ProgressView().controlSize(.small)
             }
@@ -108,6 +112,23 @@ struct ContentView: View {
     private func openDetail(_ agent: Agent) {
         openWindow(id: "agent-detail", value: agent.id)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Fallback when `bwoc list` can't find the workspace (e.g. bundled .app
+    /// with cwd = "/"): let the operator pin the root, persist it, and retry.
+    private func chooseWorkspace() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Use Workspace"
+        panel.message = "Select your BWOC workspace root (the folder containing .bwoc/workspace.toml)"
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            await BwocCli.shared.setWorkspace(url.path)
+            await refresh()
+        }
     }
 
     private func handle(_ action: AgentAction, for agent: Agent) {

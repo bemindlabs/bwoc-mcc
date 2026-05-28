@@ -27,4 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // executable has no Info.plist to carry it.)
         NSApp.setActivationPolicy(.accessory)
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Reap any live stream children so a Quit with open detail windows
+        // doesn't leave orphaned `bwoc inbox --watch` / `log -f` processes.
+        StreamRegistry.shared.terminateAll()
+    }
 }

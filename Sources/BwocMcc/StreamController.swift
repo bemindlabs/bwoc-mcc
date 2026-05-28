@@ -1,6 +1,36 @@
 import Foundation
 import BwocMccCore
 
+/// Tracks live stream child processes so they can be killed when the app quits.
+/// macOS does not reap a parent's children automatically, and
+/// `applicationWillTerminate` may run before SwiftUI tears down the detail
+/// windows — without this, `bwoc inbox --watch` / `log -f` would survive as
+/// the orphan sessions the fleet view warns about. Lock-guarded so it is safe
+/// to call from `deinit` and the terminate hook off the main actor.
+final class StreamRegistry: @unchecked Sendable {
+    static let shared = StreamRegistry()
+    private let lock = NSLock()
+    private var table: [ObjectIdentifier: Process] = [:]
+
+    func register(_ p: Process) {
+        lock.lock(); defer { lock.unlock() }
+        table[ObjectIdentifier(p)] = p
+    }
+
+    func unregister(_ p: Process) {
+        lock.lock(); defer { lock.unlock() }
+        table[ObjectIdentifier(p)] = nil
+    }
+
+    func terminateAll() {
+        lock.lock()
+        let procs = Array(table.values)
+        table.removeAll()
+        lock.unlock()
+        for p in procs where p.isRunning { p.terminate() }
+    }
+}
+
 /// Owns a long-running `bwoc` child process and republishes its stdout as
 /// lines. Lifecycle is explicit: `start` spawns, `stop` terminates — the view
 /// must call `stop` on disappear so the child never outlives the window (which
@@ -42,6 +72,7 @@ final class StreamController: ObservableObject {
             try proc.run()
             process = proc
             running = true
+            StreamRegistry.shared.register(proc)
         } catch {
             lines = ["failed to start `bwoc \(argv.joined(separator: " "))`: \(error.localizedDescription)"]
         }
@@ -51,6 +82,7 @@ final class StreamController: ObservableObject {
         if let process {
             (process.standardOutput as? Pipe)?.fileHandleForReading.readabilityHandler = nil
             if process.isRunning { process.terminate() }
+            StreamRegistry.shared.unregister(process)
         }
         process = nil
         running = false
@@ -66,6 +98,9 @@ final class StreamController: ObservableObject {
     }
 
     deinit {
-        process?.terminate()
+        if let process {
+            if process.isRunning { process.terminate() }
+            StreamRegistry.shared.unregister(process)
+        }
     }
 }
