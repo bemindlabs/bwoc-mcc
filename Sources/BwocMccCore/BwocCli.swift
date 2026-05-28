@@ -217,14 +217,31 @@ public actor BwocCli {
         process.standardError = stderr
 
         try process.run()
-        process.waitUntilExit()
+
+        // Drain both pipes on background threads *while the child runs*. Reading
+        // only after waitUntilExit() deadlocks once a command writes past the OS
+        // pipe buffer (~64KB): the child blocks on write, we block on wait. The
+        // `await`s also free the actor instead of blocking it for the whole run.
+        async let outData = Self.readToEnd(stdout.fileHandleForReading)
+        async let errData = Self.readToEnd(stderr.fileHandleForReading)
+        let out = await outData
+        let err = await errData
+
+        process.waitUntilExit()   // pipes are at EOF, so this returns at once
 
         if process.terminationStatus != 0 {
-            let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-            let errStr = String(data: errData, encoding: .utf8) ?? ""
+            let errStr = String(data: err, encoding: .utf8) ?? ""
             throw BwocCliError.nonZeroExit(code: process.terminationStatus, stderr: errStr)
         }
 
-        return stdout.fileHandleForReading.readDataToEndOfFile()
+        return out
+    }
+
+    private static func readToEnd(_ handle: FileHandle) async -> Data {
+        await withCheckedContinuation { (cont: CheckedContinuation<Data, Never>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                cont.resume(returning: handle.readDataToEndOfFile())
+            }
+        }
     }
 }

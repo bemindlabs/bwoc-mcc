@@ -38,7 +38,7 @@ public struct ScrumState: Sendable, Equatable {
 
 public enum ScrumReader {
     private struct Config: Decodable { let currentSprint: String? }
-    private struct SprintFile: Decodable { let endDate: String?; let committedPoints: Int? }
+    private struct SprintFile: Decodable { let endDate: String?; let committedPoints: Int?; let status: String? }
     private struct Backlog: Decodable { let items: [ScrumStory] }
 
     private static func decoder() -> JSONDecoder {
@@ -53,15 +53,14 @@ public enum ScrumReader {
         let scrum = URL(fileURLWithPath: workspace).appendingPathComponent(".scrum")
         let dec = decoder()
 
-        guard
-            let configData = try? Data(contentsOf: scrum.appendingPathComponent("config.json")),
-            let sprintId = (try? dec.decode(Config.self, from: configData))?.currentSprint
-        else { return nil }
+        let configSprint = (try? Data(contentsOf: scrum.appendingPathComponent("config.json")))
+            .flatMap { try? dec.decode(Config.self, from: $0) }?.currentSprint
 
-        guard
-            let sprintData = try? Data(contentsOf: scrum.appendingPathComponent("sprints/\(sprintId).json")),
-            let sprint = try? dec.decode(SprintFile.self, from: sprintData)
-        else { return nil }
+        guard let (sprintId, sprint) = resolveActiveSprint(
+            configSprint: configSprint,
+            sprintsDir: scrum.appendingPathComponent("sprints"),
+            dec: dec
+        ) else { return nil }
 
         let items = (try? Data(contentsOf: scrum.appendingPathComponent("backlog.json")))
             .flatMap { try? dec.decode(Backlog.self, from: $0) }?.items ?? []
@@ -73,6 +72,36 @@ public enum ScrumReader {
             items: items,
             now: now
         )
+    }
+
+    /// Resolve the sprint to display. Honor `config.current_sprint` only when it
+    /// names a real, still-`active` sprint; otherwise scan the sprints directory
+    /// for whichever one is `active`. The pointer is known to drift — it has been
+    /// null, and can lag on a just-closed sprint — so the scan is the safety net.
+    private static func resolveActiveSprint(
+        configSprint: String?,
+        sprintsDir: URL,
+        dec: JSONDecoder
+    ) -> (String, SprintFile)? {
+        if let id = configSprint,
+           let data = try? Data(contentsOf: sprintsDir.appendingPathComponent("\(id).json")),
+           let sprint = try? dec.decode(SprintFile.self, from: data),
+           sprint.status == "active" {
+            return (id, sprint)
+        }
+
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: sprintsDir, includingPropertiesForKeys: nil
+        )) ?? []
+        for url in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+            where url.pathExtension == "json" {
+            if let data = try? Data(contentsOf: url),
+               let sprint = try? dec.decode(SprintFile.self, from: data),
+               sprint.status == "active" {
+                return (url.deletingPathExtension().lastPathComponent, sprint)
+            }
+        }
+        return nil
     }
 
     /// Pure derivation — separated from IO so it can be unit-tested.

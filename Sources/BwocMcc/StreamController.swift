@@ -65,7 +65,7 @@ final class StreamController: ObservableObject {
             Task { @MainActor [weak self] in self?.ingest(chunk) }
         }
         proc.terminationHandler = { [weak self] _ in
-            Task { @MainActor [weak self] in self?.running = false }
+            Task { @MainActor [weak self] in self?.finish() }
         }
 
         do {
@@ -89,7 +89,18 @@ final class StreamController: ObservableObject {
     }
 
     private func ingest(_ chunk: String) {
-        let fresh = buffer.append(chunk)
+        appendLines(buffer.append(chunk))
+    }
+
+    /// Child exited: surface any buffered text that never got its trailing
+    /// newline (e.g. the last `log -f` line before the agent stopped), then
+    /// mark the stream idle.
+    private func finish() {
+        if let tail = buffer.flush() { appendLines([tail]) }
+        running = false
+    }
+
+    private func appendLines(_ fresh: [String]) {
         guard !fresh.isEmpty else { return }
         lines.append(contentsOf: fresh)
         if lines.count > maxLines {
