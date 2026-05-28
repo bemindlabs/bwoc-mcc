@@ -1,56 +1,138 @@
-# BWOC macOS Control Center (`bwoc-mcc`)
+# bwoc-mcc
 
-A lightweight macOS **menu-bar** app that gives you, at a glance, the live state
-of your BWOC agent fleet — and lets you drive the most common `bwoc` CLI
-actions without opening a terminal.
+> SwiftUI macOS menu-bar control center for the BWOC agent fleet.
 
-> See also: [TH](./README.th.md) — บันทึกภาษาไทยฉบับคู่ขนาน
+[![Swift](https://img.shields.io/badge/Swift-5.9-orange.svg?logo=swift)](https://swift.org)
+[![Platform](https://img.shields.io/badge/macOS-13.0%2B-blue.svg)](https://www.apple.com/macos)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/status-alpha-red.svg)](#status)
 
-## Scope
+Live status of your [BWOC](https://github.com/bemindlabs/BWOC-Framework) agent
+fleet — agents, sessions, inboxes — surfaced from the macOS menu bar, with
+quick actions to spawn, chat, stop, and supervise without leaving your
+workflow.
 
-Focused on **BWOC fleet operations only**:
+> 🇹🇭 บันทึกภาษาไทย: [README.th.md](./README.th.md)
 
-- List incarnated agents with `STATUS` / `BACKEND` / `UPTIME` / `INBOX` count.
-- Surface running vs idle sessions (mirrors `bwoc sessions`).
-- Quick actions: spawn / chat / stop / start / supervise.
-- Inbox preview + "open in terminal" jump-off.
-- Workspace summary (path, agent count, total inbox).
+## Table of Contents
 
-**Out of scope** — provider auth/quota tracking. That belongs to
-[LLMProviderMonitor](https://github.com/bemindlabs/LLMProviderMonitor); the two
-apps are meant to sit side-by-side in the menu bar, not overlap.
+- [Features](#features)
+- [Screenshot](#screenshot)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Development](#development)
+- [Scope](#scope)
+- [Related Projects](#related-projects)
+- [Status](#status)
+- [Contributing](#contributing)
+- [License](#license)
 
-## How it works
+## Features
 
-- Shells out to the `bwoc` CLI (resolved off `PATH`, including
-  `/opt/homebrew/bin`). The app does **not** link the BWOC Rust core directly —
-  all reads go through `bwoc <cmd> --json` for stability across releases.
-- Auto-refreshes every 5 seconds; manual ↻ forces an immediate poll.
-- Interactive sessions (`bwoc spawn` / `bwoc chat`) open **Terminal.app** —
-  those flows need a real TTY and can't run inside the app.
+- 👥 **Fleet at a glance** — every incarnated agent with status, backend, and
+  inbox count, refreshed every 5 seconds.
+- 🟢 **Running vs idle** — color dot per agent mirrors `bwoc sessions`.
+- 📥 **Inbox badges** — pending message count surfaced inline; click through to
+  preview *(planned)*.
+- ⚡ **Quick actions** *(planned)* — spawn, chat, stop, start, supervise without
+  switching to a terminal.
+- 🏠 **Workspace summary** — workspace path + total agents, always visible.
+- 🪶 **Native + lightweight** — pure SwiftUI `MenuBarExtra`, no Electron, no
+  background daemons beyond `bwoc` itself.
 
-The roster of supported CLI commands lives in one place:
-[`BwocCli`](Sources/BwocMccCore/BwocCli.swift).
+## Screenshot
 
-## Status
+> 📸 Screenshots coming soon — open the menu bar after running and see the live
+> fleet view.
 
-**Alpha scaffold** — Package.swift + minimal SwiftUI shell + one working
-`bwoc list --json` call. Not yet on the App Store; install from source:
+## Requirements
+
+- macOS **13.0** (Ventura) or later
+- Swift **5.9** toolchain (Xcode 15+ or Command Line Tools)
+- [`bwoc`](https://github.com/bemindlabs/BWOC-Framework) CLI installed and
+  resolvable on `PATH` — checked in this order:
+  1. `/opt/homebrew/bin/bwoc`
+  2. `/usr/local/bin/bwoc`
+  3. `~/.local/bin/bwoc`
+  4. `~/.cargo/bin/bwoc`
+
+## Installation
 
 ```bash
 git clone https://github.com/bemindlabs/bwoc-mcc.git
 cd bwoc-mcc
 swift build -c release
-.build/release/BwocMcc
+./.build/release/BwocMcc
 ```
 
-## Sibling Project
+The app runs as an **accessory** (menu-bar only) — no Dock icon, no
+⌘-Tab entry. Quit via the in-app **Quit** button or `⌘Q`.
 
-If you also want to monitor your LLM provider CLIs (Claude, Codex, Kimi,
-Antigravity) — auth status and credit-used — install
-[LLMProviderMonitor](https://github.com/bemindlabs/LLMProviderMonitor)
-alongside this app.
+## Usage
+
+1. Launch `BwocMcc` (see [Installation](#installation)).
+2. Look for the **`person.3.sequence`** icon in your menu bar.
+3. Click it — a 360-pixel window opens with the live fleet.
+4. The list auto-refreshes every 5 seconds; click **↻** to force a refresh.
+
+## Development
+
+```bash
+# Debug build (faster iteration)
+swift build
+
+# Run the menu-bar app
+swift run BwocMcc
+
+# Run the headless test suite (CoreChecks — no XCTest required)
+swift run CoreChecks
+```
+
+The package has three targets:
+
+| Target | Kind | Path |
+|---|---|---|
+| `BwocMccCore` | library | `Sources/BwocMccCore/` |
+| `BwocMcc` | executable (SwiftUI app) | `Sources/BwocMcc/` |
+| `CoreChecks` | executable (test runner) | `Tests/CoreChecks/` |
+
+All CLI shell-outs go through `bwoc <cmd> --json` so the app stays insulated
+from BWOC's Rust internals. See
+[`BwocCli`](Sources/BwocMccCore/BwocCli.swift) for the supported commands.
+
+## Scope
+
+`bwoc-mcc` is focused on **BWOC fleet operations only**: agents, sessions,
+inboxes, and (soon) scrum state. Out of scope:
+
+- **LLM provider auth & quota** — that's
+  [LLMProviderMonitor](https://github.com/bemindlabs/LLMProviderMonitor)'s
+  job. The two apps are designed to live side-by-side in the menu bar.
+- **Editing agent files** — read-only by design. Use `bwoc spawn`/`bwoc chat`
+  for that.
+
+## Related Projects
+
+- 🤖 [BWOC-Framework](https://github.com/bemindlabs/BWOC-Framework) — the Rust
+  orchestration framework this app reads from.
+- 🔌 [LLMProviderMonitor](https://github.com/bemindlabs/LLMProviderMonitor) —
+  sibling menu-bar app for provider auth/quota.
+
+## Status
+
+**Alpha** — the scaffold builds, launches, and renders the live fleet from
+`bwoc list --json`. Quick actions, sessions view, inbox preview, and scrum
+integration are tracked under `BWOC-EPIC-5` in the BWOC workspace.
+
+## Contributing
+
+Issues and PRs welcome. Before submitting:
+
+1. Open an issue describing the change (so we can scope it together).
+2. Run `swift build` and `swift run CoreChecks` — both must be green.
+3. Keep PRs focused — one concern per PR.
 
 ## License
 
-TBD — to match the rest of the `bemindlabs` BWOC ecosystem.
+[MIT](./LICENSE) © 2026 BeMindLabs and contributors.
