@@ -167,7 +167,8 @@ struct ContentView: View {
             sessions = fresh
         }
         if let ws = snapshot?.workspace {
-            scrum = ScrumReader.read(workspace: ws)
+            // Read .scrum/ off the main actor — it's blocking file IO.
+            scrum = await Task.detached { ScrumReader.read(workspace: ws) }.value
         }
     }
 }
@@ -278,6 +279,16 @@ private struct AgentRow: View {
                 inboxPreview
             }
         }
+        .onChange(of: agent.inboxCount) { newCount in
+            // Keep an open preview in sync with the 5s fleet refresh.
+            guard expanded else { return }
+            if newCount == 0 {
+                expanded = false
+                messages = []
+            } else {
+                reloadInbox()
+            }
+        }
     }
 
     @ViewBuilder
@@ -360,8 +371,11 @@ private struct AgentRow: View {
 
     private func toggleInbox() {
         expanded.toggle()
-        guard expanded, messages.isEmpty else { return }
-        loadingInbox = true
+        if expanded { reloadInbox() }
+    }
+
+    private func reloadInbox() {
+        loadingInbox = messages.isEmpty   // spinner only on the first fetch
         Task {
             defer { loadingInbox = false }
             if let snap = try? await BwocCli.shared.inbox(agent: agent.id, limit: 3) {

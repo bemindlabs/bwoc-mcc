@@ -60,16 +60,28 @@ private struct StreamView: View {
 
     private let bottomID = "bottom"
 
+    @ViewBuilder
     private var statusPill: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(controller.running ? .green : .secondary)
-                .frame(width: 6, height: 6)
-            Text(controller.running ? "streaming" : "stopped")
-                .font(.caption2)
+        if controller.running {
+            HStack(spacing: 4) {
+                Circle().fill(.green).frame(width: 6, height: 6)
+                Text("streaming").font(.caption2)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.thinMaterial, in: Capsule())
+        } else {
+            // Child exited (error / agent stopped / EOF) — offer a restart
+            // instead of forcing a tab close+reopen.
+            Button {
+                Task { await controller.start(kind: kind, agent: agent) }
+            } label: {
+                Label("Reconnect", systemImage: "arrow.clockwise").font(.caption2)
+            }
+            .buttonStyle(.borderless)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.thinMaterial, in: Capsule())
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(.thinMaterial, in: Capsule())
     }
 }
