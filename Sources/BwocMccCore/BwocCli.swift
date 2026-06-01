@@ -214,12 +214,20 @@ public actor BwocCli {
     /// Settings and used to decide whether the native chat window is available.
     public func chatBinaryPath() -> String? { chatBinaryURL?.path }
 
-    /// Argv for `bwoc-chat`: the agent id(s), then an explicit `--workspace` so
-    /// the window resolves the right registry even when launched with a cwd
-    /// outside the workspace tree (e.g. a double-clicked .app). Naming several
-    /// agents opens one shared team-chat window. Pure + testable.
-    public static func chatArgv(agents: [String], workspace: String?) -> [String] {
-        agents + (workspace.map { ["--workspace", $0] } ?? [])
+    /// Argv for `bwoc-chat`: the agent id(s), an optional `--claude-code` (drive
+    /// the `claude` CLI via subscription), then an explicit `--workspace` so the
+    /// window resolves the right registry even when launched with a cwd outside
+    /// the workspace tree (e.g. a double-clicked .app). Naming several agents
+    /// opens one shared team-chat window. Pure + testable.
+    public static func chatArgv(
+        agents: [String],
+        workspace: String?,
+        claudeCode: Bool = false
+    ) -> [String] {
+        var argv = agents
+        if claudeCode { argv.append("--claude-code") }
+        if let workspace { argv += ["--workspace", workspace] }
+        return argv
     }
 
     /// Open the native `bwoc-chat` window for one or more agents. Fire-and-forget:
@@ -229,9 +237,17 @@ public actor BwocCli {
     /// is unresolved or the spawn fails; the caller can then fall back to Terminal.
     public func openChatWindow(agents: [Agent]) throws {
         guard let chatBinaryURL else { throw BwocCliError.chatBinaryNotFound }
+        // All-Claude selection → drive the `claude` CLI (subscription auth, no
+        // API key). A mixed or non-Claude window uses the harness path, since
+        // `--claude-code` is window-wide in bwoc-chat.
+        let claudeCode = !agents.isEmpty && agents.allSatisfy(\.isClaudeBacked)
         let proc = Process()
         proc.executableURL = chatBinaryURL
-        proc.arguments = Self.chatArgv(agents: agents.map(\.id), workspace: cachedWorkspace)
+        proc.arguments = Self.chatArgv(
+            agents: agents.map(\.id),
+            workspace: cachedWorkspace,
+            claudeCode: claudeCode
+        )
         // Launch from the workspace so bwoc-chat's `@`-file completion lists
         // workspace files rather than the host app's cwd ("/"). Harmless if unset.
         if let cachedWorkspace {

@@ -39,6 +39,14 @@ extension Agent {
     public var supportsChatWindow: Bool {
         Self.chatWindowBackends.contains(backend)
     }
+
+    /// A Claude-family agent. When every agent in a window is Claude-backed,
+    /// `bwoc-chat` is launched with `--claude-code` so it drives the `claude`
+    /// CLI via the logged-in subscription (no `ANTHROPIC_API_KEY`) instead of
+    /// the harness Anthropic provider.
+    public var isClaudeBacked: Bool {
+        backend == "claude" || backend == "anthropic"
+    }
 }
 
 public struct FleetSnapshot: Codable, Sendable {

@@ -84,6 +84,11 @@ check("chatArgv supports a team (several agents, one window)",
       BwocCli.chatArgv(agents: ["agent-a", "agent-b"], workspace: "/ws") == ["agent-a", "agent-b", "--workspace", "/ws"])
 check("chatArgv omits --workspace when nil",
       BwocCli.chatArgv(agents: ["agent-a"], workspace: nil) == ["agent-a"])
+// claude-code wiring (MCC-12): all-Claude windows drive the claude CLI.
+check("chatArgv injects --claude-code before --workspace",
+      BwocCli.chatArgv(agents: ["agent-a"], workspace: "/ws", claudeCode: true) == ["agent-a", "--claude-code", "--workspace", "/ws"])
+check("claude agent isClaudeBacked", agentWith(backend: "claude").isClaudeBacked)
+check("ollama agent is NOT claude-backed", !agentWith(backend: "ollama").isClaudeBacked)
 
 // 3. Shell/AppleScript escaping guards (MCC-1) — quoting must neutralize
 //    embedded quotes so a crafted agent id cannot break out of the command.

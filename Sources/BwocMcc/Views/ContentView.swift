@@ -10,6 +10,11 @@ struct ContentView: View {
     @State private var lastError: String? = nil
     @State private var isRefreshing = false
     @State private var pendingStop: Agent? = nil
+    /// Team-chat selection mode: rows show a checkbox and the footer offers
+    /// "Open team chat (N)", which launches ONE bwoc-chat window for all picked
+    /// agents (`bwoc-chat a b c`).
+    @State private var teamMode = false
+    @State private var teamSelection: Set<String> = []
 
     @AppStorage("refreshInterval") private var refreshInterval: Double = 5
 
@@ -25,6 +30,9 @@ struct ContentView: View {
                     AgentRow(
                         agent: agent,
                         blocked: scrum?.blockedAgents.contains(agent.id) ?? false,
+                        teamMode: teamMode,
+                        selected: teamSelection.contains(agent.id),
+                        onToggleSelect: { toggleTeam(agent) },
                         onOpenDetail: { openDetail(agent) }
                     ) { action in
                         handle(action, for: agent)
@@ -57,11 +65,21 @@ struct ContentView: View {
                     .foregroundStyle(.red)
                     .lineLimit(2)
             }
+            if teamMode {
+                teamBar
+            }
             Divider()
             HStack {
                 Button("Quit") { NSApp.terminate(nil) }
                     .keyboardShortcut("q")
                 Spacer()
+                Button {
+                    teamMode.toggle()
+                    if !teamMode { teamSelection.removeAll() }
+                } label: {
+                    Image(systemName: teamMode ? "person.2.fill" : "person.2")
+                }
+                .help(teamMode ? "Exit team-chat selection" : "Team chat — pick agents for one shared window")
                 Button {
                     openWindow(id: "settings")
                     NSApp.activate(ignoringOtherApps: true)
@@ -112,6 +130,59 @@ struct ContentView: View {
                 Text("\(snapshot.agents.count) agents")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Bottom bar shown in team-chat mode: count + Cancel + Open.
+    private var teamBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "person.2.fill")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text("\(teamSelection.count) selected")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("Cancel") {
+                teamMode = false
+                teamSelection.removeAll()
+            }
+            .controlSize(.small)
+            Button {
+                openTeamChat()
+            } label: {
+                Label("Open team chat", systemImage: "bubble.left.and.bubble.right")
+            }
+            .controlSize(.small)
+            .disabled(teamSelection.count < 2)
+            .help("Open one bwoc-chat window for the selected agents")
+        }
+    }
+
+    private func toggleTeam(_ agent: Agent) {
+        // Only harness-renderable agents can join a bwoc-chat window; ignore taps
+        // on the rest (their checkbox is disabled anyway).
+        guard agent.supportsChatWindow else { return }
+        if teamSelection.contains(agent.id) {
+            teamSelection.remove(agent.id)
+        } else {
+            teamSelection.insert(agent.id)
+        }
+    }
+
+    /// Launch ONE bwoc-chat window for every selected agent (`bwoc-chat a b c`).
+    private func openTeamChat() {
+        let agents = snapshot?.agents.filter { teamSelection.contains($0.id) } ?? []
+        guard agents.count >= 2 else { return }
+        Task {
+            do {
+                try await BwocCli.shared.openChatWindow(agents: agents)
+                lastError = nil
+                teamMode = false
+                teamSelection.removeAll()
+            } catch {
+                lastError = "team chat failed: \(error.localizedDescription)"
             }
         }
     }
@@ -279,6 +350,9 @@ private struct SessionsSection: View {
 private struct AgentRow: View {
     let agent: Agent
     var blocked: Bool = false
+    var teamMode: Bool = false
+    var selected: Bool = false
+    var onToggleSelect: () -> Void = {}
     var onOpenDetail: () -> Void = {}
     let onAction: (AgentAction) -> Void
 
@@ -289,6 +363,17 @@ private struct AgentRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
+                if teamMode {
+                    Button(action: onToggleSelect) {
+                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(checkboxColor)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!agent.supportsChatWindow)
+                    .help(agent.supportsChatWindow
+                        ? "Add to team chat"
+                        : "\(agent.backend) backend can't render in a chat window")
+                }
                 Circle()
                     .fill(agent.running ? .green : .gray)
                     .frame(width: 8, height: 8)
@@ -305,8 +390,12 @@ private struct AgentRow: View {
                         .help("Owns a story with an open blocker")
                 }
                 Spacer()
-                inboxBadge
-                actions
+                // Per-agent actions collapse in team mode to keep the row focused
+                // on selection.
+                if !teamMode {
+                    inboxBadge
+                    actions
+                }
             }
             if expanded {
                 inboxPreview
@@ -322,6 +411,11 @@ private struct AgentRow: View {
                 reloadInbox()
             }
         }
+    }
+
+    private var checkboxColor: Color {
+        guard agent.supportsChatWindow else { return Color.secondary.opacity(0.3) }
+        return selected ? Color.accentColor : Color.secondary
     }
 
     @ViewBuilder
