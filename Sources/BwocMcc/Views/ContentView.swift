@@ -149,7 +149,27 @@ struct ContentView: View {
             pendingStop = agent
             return
         }
+        if action == .chat {
+            Task { await openChat(for: agent) }
+            return
+        }
         Task { await runAction(action, for: agent) }
+    }
+
+    /// Prefer the native `bwoc-chat` window for harness-backed agents; fall back
+    /// to `bwoc chat` in Terminal for vendor-CLI agents (which bwoc-chat can't
+    /// render) or if bwoc-chat isn't installed / fails to launch.
+    private func openChat(for agent: Agent) async {
+        if agent.supportsChatWindow, await BwocCli.shared.chatBinaryPath() != nil {
+            do {
+                try await BwocCli.shared.openChatWindow(agents: [agent])
+                lastError = nil
+                return
+            } catch {
+                // Launch failed — fall through to the Terminal path below.
+            }
+        }
+        await runAction(.chat, for: agent)
     }
 
     private func runAction(_ action: AgentAction, for agent: Agent) async {
@@ -331,7 +351,9 @@ private struct AgentRow: View {
             }
             .buttonStyle(.borderless)
             .help("Stream inbox + log")
-            actionButton(.chat, help: "Open chat in Terminal")
+            actionButton(.chat, help: agent.supportsChatWindow
+                ? "Open native chat window (bwoc-chat)"
+                : "Open chat in Terminal")
             if agent.running {
                 actionButton(.stop, help: "Stop agent")
                 actionButton(.supervise, help: "Supervise in Terminal (restart on crash)")

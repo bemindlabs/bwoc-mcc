@@ -35,8 +35,12 @@ workflow.
 - 🟢 **Running vs idle** — color dot per agent mirrors `bwoc sessions`.
 - 📥 **Inbox badges** — pending message count surfaced inline; click through to
   preview *(planned)*.
-- ⚡ **Quick actions** *(planned)* — spawn, chat, stop, start, supervise without
-  switching to a terminal.
+- ⚡ **Quick actions** — spawn, chat, stop, start, supervise without leaving the
+  menu bar.
+- 💬 **Native chat windows** — the chat action opens a
+  [`bwoc-chat`](https://github.com/bemindlabs/bwoc-chat) egui window for
+  harness-backed agents (`ollama` / `openai-compatible`); vendor-CLI agents
+  fall back to `bwoc chat` in Terminal.
 - 🏠 **Workspace summary** — workspace path + total agents, always visible.
 - 🪶 **Native + lightweight** — pure SwiftUI `MenuBarExtra`, no Electron, no
   background daemons beyond `bwoc` itself.
@@ -62,9 +66,12 @@ workflow.
 ```bash
 git clone https://github.com/bemindlabs/bwoc-mcc.git
 cd bwoc-mcc
-swift build -c release
-./.build/release/BwocMcc
+./install.sh            # build → BwocMcc.app → /Applications, then launch
+./install.sh --login    # …and register as a (hidden) Login Item
 ```
+
+`install.sh` is idempotent — re-run it after any code change to reinstall.
+To run without installing: `swift build -c release && ./.build/release/BwocMcc`.
 
 The app runs as an **accessory** (menu-bar only) — no Dock icon, no
 ⌘-Tab entry. Quit via the in-app **Quit** button or `⌘Q`.
@@ -116,6 +123,9 @@ inboxes, and (soon) scrum state. Out of scope:
 
 - 🤖 [BWOC-Framework](https://github.com/bemindlabs/BWOC-Framework) — the Rust
   orchestration framework this app reads from.
+- 💬 [bwoc-chat](https://github.com/bemindlabs/bwoc-chat) — native egui chat
+  window this app launches for harness-backed agents. Resolved beside `bwoc`
+  (or set its path in Settings).
 - 🔌 [LLMProviderMonitor](https://github.com/bemindlabs/LLMProviderMonitor) —
   sibling menu-bar app for provider auth/quota.
 

@@ -35,8 +35,12 @@ terminal เลยค่ะ
 - 🟢 **Running vs idle** — จุดสีต่อแถวสะท้อน `bwoc sessions`
 - 📥 **Badge inbox** — แสดงจำนวนข้อความค้างเป็น badge inline; คลิกเพื่อดู
   พรีวิว *(วางแผน)*
-- ⚡ **Quick action** *(วางแผน)* — spawn / chat / stop / start / supervise
-  โดยไม่ต้องสลับไป terminal
+- ⚡ **Quick action** — spawn / chat / stop / start / supervise โดยไม่ต้องออกจาก
+  menu bar
+- 💬 **หน้าต่าง chat แบบ native** — ปุ่ม chat เปิดหน้าต่าง egui ของ
+  [`bwoc-chat`](https://github.com/bemindlabs/bwoc-chat) ให้เอเจนต์ที่ใช้ harness
+  (`ollama` / `openai-compatible`); เอเจนต์ backend แบบ vendor-CLI จะ fall back ไป
+  `bwoc chat` ใน Terminal
 - 🏠 **สรุป workspace** — path workspace + จำนวนเอเจนต์รวม, เห็นตลอด
 - 🪶 **Native + เบา** — ใช้ SwiftUI `MenuBarExtra` ล้วน ๆ ไม่มี Electron
   ไม่มี daemon เพิ่มเติมนอกจาก `bwoc` เอง
@@ -61,9 +65,12 @@ terminal เลยค่ะ
 ```bash
 git clone https://github.com/bemindlabs/bwoc-mcc.git
 cd bwoc-mcc
-swift build -c release
-./.build/release/BwocMcc
+./install.sh            # build → BwocMcc.app → /Applications แล้วเปิดให้เลย
+./install.sh --login    # …พร้อมลงเป็น Login Item (ซ่อน)
 ```
+
+`install.sh` รันซ้ำได้ — เรียกใหม่หลังแก้โค้ดเพื่อติดตั้งทับได้เลย
+ถ้าอยากรันโดยไม่ติดตั้ง: `swift build -c release && ./.build/release/BwocMcc`
 
 แอปรันแบบ **accessory** (menu-bar เท่านั้น) — ไม่มี icon ใน Dock ไม่อยู่ใน
 ⌘-Tab ปิดด้วยปุ่ม **Quit** ในแอป หรือ `⌘Q`
@@ -115,6 +122,9 @@ inbox, และ (เร็ว ๆ นี้) สถานะ scrum สิ่ง
 
 - 🤖 [BWOC-Framework](https://github.com/bemindlabs/BWOC-Framework) — เฟรมเวิร์ก
   orchestration ภาษา Rust ที่แอปนี้อ่านข้อมูล
+- 💬 [bwoc-chat](https://github.com/bemindlabs/bwoc-chat) — หน้าต่าง chat แบบ
+  egui ที่แอปนี้เปิดให้เอเจนต์ที่ใช้ harness ค้นเจออัตโนมัติข้าง ๆ `bwoc`
+  (หรือกำหนด path เองใน Settings)
 - 🔌 [LLMProviderMonitor](https://github.com/bemindlabs/LLMProviderMonitor) —
   แอป menu bar พี่น้องสำหรับ provider auth/quota
 

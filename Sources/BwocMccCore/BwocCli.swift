@@ -2,6 +2,7 @@ import Foundation
 
 public enum BwocCliError: Error, CustomStringConvertible {
     case binaryNotFound
+    case chatBinaryNotFound
     case nonZeroExit(code: Int32, stderr: String)
     case decodeFailed(String)
     case timedOut(seconds: TimeInterval)
@@ -10,6 +11,8 @@ public enum BwocCliError: Error, CustomStringConvertible {
         switch self {
         case .binaryNotFound:
             return "`bwoc` binary not found on PATH"
+        case .chatBinaryNotFound:
+            return "`bwoc-chat` not found — install it (cargo install --path projects/bwoc-chat) or set its path in Settings"
         case .nonZeroExit(let code, let stderr):
             return "bwoc exited \(code): \(stderr.trimmingCharacters(in: .whitespacesAndNewlines))"
         case .decodeFailed(let msg):
@@ -95,7 +98,18 @@ public actor BwocCli {
         NSString(string: "~/.cargo/bin/bwoc").expandingTildeInPath
     ]
 
+    /// Well-known install dirs for the sibling `bwoc-chat` GUI binary. Probed
+    /// after a user override and a sibling of the resolved `bwoc` (they're
+    /// normally installed together, e.g. both under `~/.cargo/bin`).
+    private static let chatCandidatePaths: [String] = [
+        "/opt/homebrew/bin/bwoc-chat",
+        "/usr/local/bin/bwoc-chat",
+        NSString(string: "~/.local/bin/bwoc-chat").expandingTildeInPath,
+        NSString(string: "~/.cargo/bin/bwoc-chat").expandingTildeInPath
+    ]
+
     private let binaryURL: URL?
+    private let chatBinaryURL: URL?
 
     /// Learned from the first successful `list()` and then passed as
     /// `--workspace` to every subsequent command, so actions resolve the right
@@ -105,13 +119,28 @@ public actor BwocCli {
 
     static let workspaceDefaultsKey = "bwoc.workspacePath"
     public static let binaryDefaultsKey = "bwoc.binaryPath"
+    public static let chatBinaryDefaultsKey = "bwoc.chatBinaryPath"
 
     public init() {
         // A user-set override (Settings) wins over the built-in candidates.
         let override = UserDefaults.standard.string(forKey: Self.binaryDefaultsKey)
             .flatMap { $0.isEmpty ? nil : $0 }
         let candidates = (override.map { [$0] } ?? []) + Self.candidatePaths
-        self.binaryURL = candidates
+        let resolvedBwoc = candidates
+            .map(URL.init(fileURLWithPath:))
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        self.binaryURL = resolvedBwoc
+
+        // Resolve the sibling `bwoc-chat` GUI: an override, then next to the
+        // resolved `bwoc`, then the well-known bin dirs.
+        let chatOverride = UserDefaults.standard.string(forKey: Self.chatBinaryDefaultsKey)
+            .flatMap { $0.isEmpty ? nil : $0 }
+        let sibling = resolvedBwoc?.deletingLastPathComponent()
+            .appendingPathComponent("bwoc-chat").path
+        let chatCandidates = (chatOverride.map { [$0] } ?? [])
+            + (sibling.map { [$0] } ?? [])
+            + Self.chatCandidatePaths
+        self.chatBinaryURL = chatCandidates
             .map(URL.init(fileURLWithPath:))
             .first { FileManager.default.isExecutableFile(atPath: $0.path) }
         // Seed the workspace so the very first `list()` resolves even when cwd
@@ -180,6 +209,36 @@ public actor BwocCli {
     /// Resolved `bwoc` binary path, for callers that spawn their own process
     /// (e.g. the streaming detail window).
     public func binaryPath() -> String? { binaryURL?.path }
+
+    /// Resolved `bwoc-chat` GUI binary path (nil if not installed) — surfaced in
+    /// Settings and used to decide whether the native chat window is available.
+    public func chatBinaryPath() -> String? { chatBinaryURL?.path }
+
+    /// Argv for `bwoc-chat`: the agent id(s), then an explicit `--workspace` so
+    /// the window resolves the right registry even when launched with a cwd
+    /// outside the workspace tree (e.g. a double-clicked .app). Naming several
+    /// agents opens one shared team-chat window. Pure + testable.
+    public static func chatArgv(agents: [String], workspace: String?) -> [String] {
+        agents + (workspace.map { ["--workspace", $0] } ?? [])
+    }
+
+    /// Open the native `bwoc-chat` window for one or more agents. Fire-and-forget:
+    /// `bwoc-chat` is its own GUI process owning its window + harness children, so
+    /// it's launched detached (no pipes, no wait) and outlives this menu-bar app —
+    /// the same lifecycle as a `bwoc chat` Terminal window. Throws if `bwoc-chat`
+    /// is unresolved or the spawn fails; the caller can then fall back to Terminal.
+    public func openChatWindow(agents: [Agent]) throws {
+        guard let chatBinaryURL else { throw BwocCliError.chatBinaryNotFound }
+        let proc = Process()
+        proc.executableURL = chatBinaryURL
+        proc.arguments = Self.chatArgv(agents: agents.map(\.id), workspace: cachedWorkspace)
+        // Launch from the workspace so bwoc-chat's `@`-file completion lists
+        // workspace files rather than the host app's cwd ("/"). Harmless if unset.
+        if let cachedWorkspace {
+            proc.currentDirectoryURL = URL(fileURLWithPath: cachedWorkspace)
+        }
+        try proc.run()
+    }
 
     /// Workspace-qualified argv for a long-running stream.
     public func streamArgv(_ kind: StreamKind, agent: String) -> [String] {
