@@ -62,6 +62,18 @@ terminal เลยค่ะ
 
 ## การติดตั้ง
 
+### Homebrew (แนะนำ)
+
+```bash
+brew install --cask bemindlabs/tap/bwoc-mcc
+```
+
+แอปเซ็นแบบ ad-hoc (ยังไม่ notarize) ครั้งแรกถ้า macOS บล็อก ให้คลิกขวาที่
+**BwocMcc.app** → **Open** หรือรัน
+`xattr -dr com.apple.quarantine "/Applications/BwocMcc.app"`
+
+### จาก source
+
 ```bash
 git clone https://github.com/bemindlabs/bwoc-mcc.git
 cd bwoc-mcc

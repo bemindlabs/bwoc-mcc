@@ -63,6 +63,18 @@ workflow.
 
 ## Installation
 
+### Homebrew (recommended)
+
+```bash
+brew install --cask bemindlabs/tap/bwoc-mcc
+```
+
+The app is ad-hoc signed (not notarized). On first launch, if macOS blocks it,
+right-click **BwocMcc.app** → **Open**, or run
+`xattr -dr com.apple.quarantine "/Applications/BwocMcc.app"`.
+
+### From source
+
 ```bash
 git clone https://github.com/bemindlabs/bwoc-mcc.git
 cd bwoc-mcc
