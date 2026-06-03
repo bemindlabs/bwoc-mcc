@@ -5,10 +5,12 @@ import BwocMccCore
 struct SettingsView: View {
     @AppStorage("refreshInterval") private var refreshInterval: Double = 5
     @AppStorage(BwocCli.binaryDefaultsKey) private var binaryOverride: String = ""
+    @AppStorage(BwocCli.chatBinaryDefaultsKey) private var chatBinaryOverride: String = ""
     @AppStorage(TerminalApp.defaultsKey) private var terminalApp: String = TerminalApp.terminal.rawValue
 
     @State private var workspace: String = ""
     @State private var resolvedBinary: String = ""
+    @State private var resolvedChatBinary: String = ""
 
     var body: some View {
         Form {
@@ -36,7 +38,7 @@ struct SettingsView: View {
                         Text(app.rawValue).tag(app.rawValue)
                     }
                 }
-                Text("Where spawn / chat / supervise / inbox-watch open.")
+                Text("Where spawn / supervise / inbox-watch open. Chat for harness agents (ollama / openai-compatible) opens a native bwoc-chat window instead; vendor-CLI agents still chat here.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -49,12 +51,23 @@ struct SettingsView: View {
                 Text("Leave blank to auto-detect. Applies on relaunch.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+
+            Section("bwoc-chat (native chat window)") {
+                Text("Resolved: \(resolvedChatBinary.isEmpty ? "not found — chat falls back to Terminal" : resolvedChatBinary)")
+                    .font(.callout)
+                    .foregroundStyle(resolvedChatBinary.isEmpty ? .orange : .secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                TextField("override path (optional)", text: $chatBinaryOverride)
+                Text("The egui chat window for harness agents. Auto-detected beside bwoc; blank to keep that. Applies on relaunch.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 400, height: 340)
+        .frame(width: 400, height: 420)
         .task {
             workspace = await BwocCli.shared.currentWorkspace() ?? ""
             resolvedBinary = await BwocCli.shared.binaryPath() ?? ""
+            resolvedChatBinary = await BwocCli.shared.chatBinaryPath() ?? ""
         }
     }
 

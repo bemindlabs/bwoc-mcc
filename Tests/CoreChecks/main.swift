@@ -66,6 +66,30 @@ check("nil workspace omits --workspace flag",
 check("spawn with nil workspace falls back to relative path",
       AgentAction.spawn.argv(agent: argvAgent, workspace: nil) == ["spawn", "--path", "agents/agent-jisoo"])
 
+// 2b. bwoc-chat integration: backend gating + launch argv (MCC-10).
+//     Only harness backends render in a native bwoc-chat window; vendor CLIs
+//     fall back to `bwoc chat` in Terminal.
+func agentWith(backend: String) -> Agent {
+    let json = #"{"id":"agent-x","backend":"\#(backend)","status":"active","running":true,"inbox_count":0,"path":"agents/agent-x"}"#
+    return try! JSONDecoder().decode(Agent.self, from: Data(json.utf8))
+}
+check("ollama agent supports native chat window", agentWith(backend: "ollama").supportsChatWindow)
+check("openai-compatible agent supports native chat window", agentWith(backend: "openai-compatible").supportsChatWindow)
+// claude is harness-rendered via the native Anthropic provider (MCC-11).
+check("claude agent supports native chat window", agentWith(backend: "claude").supportsChatWindow)
+check("codex agent does NOT support native chat window", !agentWith(backend: "codex").supportsChatWindow)
+check("chatArgv carries agents + --workspace",
+      BwocCli.chatArgv(agents: ["agent-jisoo"], workspace: "/ws") == ["agent-jisoo", "--workspace", "/ws"])
+check("chatArgv supports a team (several agents, one window)",
+      BwocCli.chatArgv(agents: ["agent-a", "agent-b"], workspace: "/ws") == ["agent-a", "agent-b", "--workspace", "/ws"])
+check("chatArgv omits --workspace when nil",
+      BwocCli.chatArgv(agents: ["agent-a"], workspace: nil) == ["agent-a"])
+// claude-code wiring (MCC-12): all-Claude windows drive the claude CLI.
+check("chatArgv injects --claude-code before --workspace",
+      BwocCli.chatArgv(agents: ["agent-a"], workspace: "/ws", claudeCode: true) == ["agent-a", "--claude-code", "--workspace", "/ws"])
+check("claude agent isClaudeBacked", agentWith(backend: "claude").isClaudeBacked)
+check("ollama agent is NOT claude-backed", !agentWith(backend: "ollama").isClaudeBacked)
+
 // 3. Shell/AppleScript escaping guards (MCC-1) — quoting must neutralize
 //    embedded quotes so a crafted agent id cannot break out of the command.
 check("shellQuote wraps in single quotes", BwocCli.shellQuote("agent-rose") == "'agent-rose'")
