@@ -1,0 +1,80 @@
+name: release
+
+# Pump the version (major/minor/patch), build a universal app bundle,
+# publish a GitHub Release, and bump the Homebrew cask — all in one click.
+#
+# Requires repo secret HOMEBREW_TAP_TOKEN: a PAT (or fine-grained token) with
+# `contents: write` on bemindlabs/homebrew-tap.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump level"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run checks
+        run: swift run CoreChecks
+
+      - name: Bump version
+        id: bump
+        run: echo "version=$(scripts/bump-version.sh '${{ inputs.bump }}')" >> "$GITHUB_OUTPUT"
+
+      - name: Build universal app bundle
+        id: bundle
+        run: |
+          ZIP="$(scripts/bundle-app.sh)"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "sha=$(cat "$ZIP.sha256")" >> "$GITHUB_OUTPUT"
+
+      - name: Commit, tag & push
+        run: |
+          V="${{ steps.bump.outputs.version }}"
+          git add VERSION
+          git commit -m "release: v$V"
+          git tag -a "v$V" -m "bwoc-mcc v$V"
+          git push origin HEAD:main
+          git push origin "v$V"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${{ steps.bump.outputs.version }}"
+          gh release create "v$V" --title "v$V" --generate-notes "${{ steps.bundle.outputs.zip }}"
+
+      - name: Bump Homebrew cask
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          V="${{ steps.bump.outputs.version }}"
+          SHA="${{ steps.bundle.outputs.sha }}"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/bemindlabs/homebrew-tap.git" tap
+          scripts/update-cask.sh tap/Casks/bwoc-mcc.rb "$V" "$SHA"
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "bwoc-mcc: bump cask to v$V"
+          git push
