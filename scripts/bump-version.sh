@@ -5,7 +5,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 level="${1:-patch}"
-cur="$(cat VERSION)"
+cur="$(tr -d '[:space:]' <VERSION)"
+if [[ ! "$cur" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "error: VERSION must be MAJOR.MINOR.PATCH, got: '$cur'" >&2
+  exit 1
+fi
 IFS=. read -r maj min pat <<<"$cur"
 
 case "$level" in

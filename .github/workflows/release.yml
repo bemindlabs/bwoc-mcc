@@ -46,8 +46,9 @@ jobs:
         id: bundle
         run: |
           ZIP="$(scripts/bundle-app.sh)"
+          SHA="$(cat "$ZIP.sha256")"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
-          echo "sha=$(cat "$ZIP.sha256")" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Commit, tag & push
         run: |
@@ -65,13 +66,17 @@ jobs:
           V="${{ steps.bump.outputs.version }}"
           gh release create "v$V" --title "v$V" --generate-notes "${{ steps.bundle.outputs.zip }}"
 
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: bemindlabs/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
       - name: Bump Homebrew cask
-        env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           V="${{ steps.bump.outputs.version }}"
           SHA="${{ steps.bundle.outputs.sha }}"
-          git clone "https://x-access-token:${GH_TOKEN}@github.com/bemindlabs/homebrew-tap.git" tap
           scripts/update-cask.sh tap/Casks/bwoc-mcc.rb "$V" "$SHA"
           cd tap
           git config user.name "github-actions[bot]"
