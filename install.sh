@@ -20,8 +20,12 @@ swift build -c release
 
 echo "▸ assembling ${APP_NAME}.app (v${VER})…"
 rm -rf "$STAGE"
-mkdir -p "$STAGE/Contents/MacOS"
+mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
 cp ".build/release/${APP_NAME}" "$STAGE/Contents/MacOS/${APP_NAME}"
+
+# Ship the desktop-mascot sprite atlas as a plain Resources file (Bundle.main),
+# not a SwiftPM .bundle — codesign rejects the flat bundle as malformed.
+cp "Sources/${APP_NAME}/Resources/mascot_sheet.png" "$STAGE/Contents/Resources/"
 cat > "$STAGE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -43,7 +47,10 @@ cat > "$STAGE/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "▸ codesigning (ad-hoc)…"
-codesign --force --deep --sign - "$STAGE" >/dev/null
+# No --deep: the only nested "bundle" is the SwiftPM resource bundle, a flat
+# data dir (no Contents/) that codesign --deep rejects as malformed. It's data,
+# not code — sealing it as a resource of the app signature is enough.
+codesign --force --sign - "$STAGE" >/dev/null
 
 echo "▸ installing → ${DEST}"
 pkill -x "$APP_NAME" 2>/dev/null && echo "  (stopped running instance)" || true

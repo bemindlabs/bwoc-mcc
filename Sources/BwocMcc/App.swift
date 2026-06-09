@@ -43,5 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Reap any live stream children so a Quit with open detail windows
         // doesn't leave orphaned `bwoc inbox --watch` / `log -f` processes.
         StreamRegistry.shared.terminateAll()
+        // Tear down any desktop mascots so their wander timers stop with the app.
+        MascotManager.shared.dismissAll()
     }
 }
