@@ -18,6 +18,8 @@ final class MascotManager: ObservableObject {
     /// Latest fleet snapshot, pushed by the menu's refresh so agent mascots can
     /// read live `running` state without each polling `bwoc list`.
     private var fleet: FleetSnapshot?
+    /// Agent ids with an open scrum blocker (drives the orange caption dot).
+    private var blocked: Set<String> = []
 
     private var agents: [String: MascotAgent] = [:]
 
@@ -42,6 +44,11 @@ final class MascotManager: ObservableObject {
         fleet = snapshot
     }
 
+    /// Feed the set of scrum-blocked agent ids (computed alongside the refresh).
+    func updateBlocked(_ ids: Set<String>) {
+        blocked = ids
+    }
+
     private func toggle(id: String, agentID: String?, caption: String?) {
         if let existing = agents[id] {
             existing.dismiss()              // calls back into remove() via onClosed
@@ -51,10 +58,14 @@ final class MascotManager: ObservableObject {
         let agent = MascotAgent(id: id, agentID: agentID, caption: caption)
         agent.onClosed = { [weak self] cid in self?.remove(cid) }
         // Read the mascot's *current* binding (it can be reassigned via its
-        // right-click menu), so running-state and the assign list stay live.
-        agent.runningProvider = { [weak self, weak agent] in
-            guard let aid = agent?.agentID else { return false }
-            return self?.fleet?.agents.first { $0.id == aid }?.running ?? false
+        // right-click menu), so status and the assign list stay live.
+        agent.statusProvider = { [weak self, weak agent] in
+            guard let self, let aid = agent?.agentID,
+                  let a = self.fleet?.agents.first(where: { $0.id == aid })
+            else { return nil }
+            return MascotAgentStatus(running: a.running,
+                                     unread: a.inboxCount,
+                                     blocked: self.blocked.contains(aid))
         }
         agent.fleetProvider = { [weak self] in self?.fleet?.agents ?? [] }
         agents[id] = agent

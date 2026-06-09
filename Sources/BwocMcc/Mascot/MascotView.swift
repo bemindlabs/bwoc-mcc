@@ -10,8 +10,15 @@ final class MascotView: NSView {
     var frameIndex: Int = 0 { didSet { if frameIndex != oldValue { needsDisplay = true } } }
     /// Vertical bob offset in points, applied on top of the sprite.
     var bob: CGFloat = 0 { didSet { needsDisplay = true } }
-    /// Optional caption shown under the mascot (e.g. an agent id).
+    /// Display name shown in the status-pill caption (agent id, "agent-" stripped),
+    /// or nil for the generic desktop mascot. Reserves the caption band when set.
     var caption: String? { didSet { needsDisplay = true } }
+    /// Whether the caption pill is currently drawn (hover-gated by MascotAgent).
+    var showCaption = false { didSet { if showCaption != oldValue { needsDisplay = true } } }
+    /// Live agent state painted into the caption pill (dot colour + unread badge).
+    var captionRunning = false { didSet { needsDisplay = true } }
+    var captionBlocked = false { didSet { needsDisplay = true } }
+    var captionUnread = 0 { didSet { needsDisplay = true } }
     /// Optional emotion glyph (an emoji) floated above the head.
     var emote: String? { didSet { if emote != oldValue { needsDisplay = true } } }
     /// Extra emote bounce, 0…1, so a pet/alert can make the glyph pop.
@@ -24,7 +31,7 @@ final class MascotView: NSView {
     var onDismiss: (() -> Void)?
     var onRightClick: ((NSEvent) -> Void)?
 
-    private let captionHeight: CGFloat = 14
+    private let captionHeight: CGFloat = 18
     private let emoteZone: CGFloat = 22
     private var tracking: NSTrackingArea?
 
@@ -72,24 +79,55 @@ final class MascotView: NSView {
                        withAttributes: gattrs)
         }
 
-        if let caption, !caption.isEmpty {
-            let style = NSMutableParagraphStyle()
-            style.alignment = .center
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
-                .foregroundColor: NSColor.white,
-                .paragraphStyle: style,
-                .shadow: {
-                    let s = NSShadow()
-                    s.shadowColor = NSColor.black.withAlphaComponent(0.85)
-                    s.shadowBlurRadius = 2
-                    s.shadowOffset = NSSize(width: 0, height: -1)
-                    return s
-                }(),
-            ]
-            let text = caption as NSString
-            let size = text.size(withAttributes: attrs)
-            text.draw(at: NSPoint(x: bounds.midX - size.width / 2, y: 0), withAttributes: attrs)
+        if showCaption, let caption, !caption.isEmpty {
+            drawCaptionPill(caption)
+        }
+    }
+
+    /// A small status pill: a colour-coded dot (green running · grey idle · orange
+    /// blocked), the name, and an unread badge — drawn in the reserved bottom band.
+    private func drawCaptionPill(_ name: String) {
+        let nameAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: NSColor.white,
+        ]
+        let nameStr = name as NSString
+        let nameSize = nameStr.size(withAttributes: nameAttrs)
+
+        let dotD: CGFloat = 6
+        let gap: CGFloat = 4
+        let padX: CGFloat = 7, padY: CGFloat = 2
+
+        let badge: NSString? = captionUnread > 0 ? ("✉\(captionUnread)" as NSString) : nil
+        let badgeAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 9, weight: .semibold),
+            .foregroundColor: NSColor(calibratedRed: 0.6, green: 0.85, blue: 1.0, alpha: 1),
+        ]
+        let badgeSize = badge?.size(withAttributes: badgeAttrs) ?? .zero
+
+        var contentW = dotD + gap + nameSize.width
+        if badge != nil { contentW += gap + badgeSize.width }
+        let pillW = contentW + padX * 2
+        let pillH = max(nameSize.height, dotD) + padY * 2
+        let pillX = bounds.midX - pillW / 2
+        let pillY = max(0, (captionHeight - pillH) / 2)
+
+        let pill = NSBezierPath(roundedRect: NSRect(x: pillX, y: pillY, width: pillW, height: pillH),
+                                xRadius: pillH / 2, yRadius: pillH / 2)
+        NSColor.black.withAlphaComponent(0.62).setFill()
+        pill.fill()
+
+        var x = pillX + padX
+        let midY = pillY + pillH / 2
+        let dotColor: NSColor = captionBlocked ? .systemOrange : (captionRunning ? .systemGreen : NSColor(calibratedWhite: 0.65, alpha: 1))
+        let dot = NSBezierPath(ovalIn: NSRect(x: x, y: midY - dotD / 2, width: dotD, height: dotD))
+        dotColor.setFill(); dot.fill()
+        x += dotD + gap
+
+        nameStr.draw(at: NSPoint(x: x, y: midY - nameSize.height / 2), withAttributes: nameAttrs)
+        x += nameSize.width + gap
+        if let badge {
+            badge.draw(at: NSPoint(x: x, y: midY - badgeSize.height / 2), withAttributes: badgeAttrs)
         }
     }
 

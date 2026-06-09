@@ -1,6 +1,13 @@
 import AppKit
 import BwocMccCore
 
+/// Live state of a mascot's bound agent, read from the fleet snapshot.
+struct MascotAgentStatus {
+    let running: Bool
+    let unread: Int
+    let blocked: Bool
+}
+
 /// One floating desktop mascot — a tiny on-screen pet for an agent (or a generic
 /// desktop companion). It:
 ///   • wanders on its own, facing the way it walks (8-view sprite),
@@ -18,9 +25,9 @@ final class MascotAgent: NSObject {
     /// Reassignable at runtime via the right-click "Assign agent" menu.
     private(set) var agentID: String?
     var onClosed: ((String) -> Void)?
-    /// Lets the mascot read live agent state (running?) from the manager's fleet
-    /// snapshot without polling `bwoc list` itself.
-    var runningProvider: (() -> Bool)?
+    /// Lets the mascot read its bound agent's live state (running / unread /
+    /// blocked) from the manager's fleet snapshot without polling itself.
+    var statusProvider: (() -> MascotAgentStatus?)?
     /// Supplies the current fleet for the right-click "Assign agent" menu.
     var fleetProvider: (() -> [Agent])?
 
@@ -66,7 +73,7 @@ final class MascotAgent: NSObject {
         let size = NSSize(width: w, height: h)
 
         view = MascotView(frame: NSRect(origin: .zero, size: size))
-        view.caption = caption
+        view.caption = Self.displayName(caption)
 
         panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: size),
@@ -138,7 +145,7 @@ final class MascotAgent: NSObject {
     /// restarts inbox polling for the new agent.
     func assign(agentID newID: String?) {
         agentID = newID
-        view.caption = newID
+        view.caption = Self.displayName(newID)
         lastMessageId = nil
         seenFirstPoll = false
         message = nil
@@ -225,11 +232,18 @@ final class MascotAgent: NSObject {
         bobPhase += tick
         defer { syncBubble() }
 
+        // Refresh the hover-gated status pill from live fleet state.
+        let status = statusProvider?()
+        view.captionRunning = status?.running ?? false
+        view.captionBlocked = status?.blocked ?? false
+        view.captionUnread = status?.unread ?? 0
+        view.showCaption = hovering && agentID != nil
+
         guard !dragging else { return }
 
         let cursor = NSEvent.mouseLocation
         let dCursor = hypot(cursor.x - center.x, cursor.y - center.y)
-        let running = runningProvider?() ?? false
+        let running = status?.running ?? false
 
         // Mood priority: pet > hover > new-message alert > curious(cursor) >
         // working > sleepy > wander.
@@ -395,7 +409,7 @@ final class MascotAgent: NSObject {
             messageUntil = max(messageUntil, clock + 4)
             _ = message
         } else if agentID != nil {
-            let running = runningProvider?() ?? false
+            let running = statusProvider?()?.running ?? false
             message = running ? "ทำงานอยู่… ⚙️" : "ว่างอยู่ 🌸"
             messageUntil = clock + 4
         }
@@ -414,6 +428,13 @@ final class MascotAgent: NSObject {
             self.seenFirstPoll = true
             self.setMessage(Self.format(msg), alert: isNew)
         }
+    }
+
+    /// Caption display name: drop the conventional "agent-" prefix ("agent-
+    /// zhongkui" → "zhongkui"). Nil for the generic desktop mascot.
+    private static func displayName(_ id: String?) -> String? {
+        guard let id else { return nil }
+        return id.hasPrefix("agent-") ? String(id.dropFirst("agent-".count)) : id
     }
 
     /// "from ▸ message", whitespace-collapsed and length-capped for the bubble.

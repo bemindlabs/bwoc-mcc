@@ -286,6 +286,8 @@ struct ContentView: View {
             // Read .scrum/ off the main actor — it's blocking file IO.
             scrum = await Task.detached { ScrumReader.read(workspace: ws) }.value
         }
+        // Feed blocked agents to mascots for the orange caption dot.
+        mascots.updateBlocked(scrum?.blockedAgents ?? [])
     }
 }
 
