@@ -30,6 +30,20 @@ enum MascotSprite {
         return Int((norm / 45.0).rounded()) % 8
     }
 
+    /// Adjacent yaw frames and blend fraction for a desktop movement heading.
+    ///
+    /// This keeps the sprite sheet unchanged while letting the view cross-fade
+    /// between the nearest 45° cells, so turns read as continuous instead of
+    /// hard snapping at each octant boundary.
+    static func yawBlend(headingDegrees heading: Double) -> (primary: Int, secondary: Int, fraction: CGFloat) {
+        let view = (90.0 - heading).truncatingRemainder(dividingBy: 360)
+        let norm = (view + 360).truncatingRemainder(dividingBy: 360)
+        let slot = norm / 45.0
+        let primary = Int(floor(slot)) % 8
+        let secondary = (primary + 1) % 8
+        return (primary, secondary, CGFloat(slot - floor(slot)))
+    }
+
     /// The front-facing (idle) frame.
     static var front: NSImage { frames.isEmpty ? NSImage() : frames[0] }
 

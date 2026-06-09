@@ -1,15 +1,26 @@
 import AppKit
 
 /// The view drawn inside the floating mascot panel: the current sprite frame
-/// with a gentle vertical bob, an optional emotion glyph above the head, and an
-/// optional name caption. Pointer interaction (hover, pet-click, drag to
+/// with procedural pose offsets, an optional emotion glyph above the head, and
+/// an optional name caption. Pointer interaction (hover, pet-click, drag to
 /// reposition, double-click to dismiss) is surfaced to `MascotAgent` via the
 /// callbacks, which owns all behaviour.
 final class MascotView: NSView {
     /// Index into `MascotSprite.frames` (0…7).
     var frameIndex: Int = 0 { didSet { if frameIndex != oldValue { needsDisplay = true } } }
+    /// Optional adjacent yaw frame to cross-fade with `frameIndex`.
+    var secondaryFrameIndex: Int? { didSet { needsDisplay = true } }
+    /// Blend amount for `secondaryFrameIndex`, 0…1.
+    var secondaryFrameAlpha: CGFloat = 0 { didSet { needsDisplay = true } }
     /// Vertical bob offset in points, applied on top of the sprite.
     var bob: CGFloat = 0 { didSet { needsDisplay = true } }
+    /// Procedural body deformation around the feet baseline.
+    var scaleX: CGFloat = 1 { didSet { needsDisplay = true } }
+    var scaleY: CGFloat = 1 { didSet { needsDisplay = true } }
+    /// Small body lean in degrees.
+    var rotationDegrees: CGFloat = 0 { didSet { needsDisplay = true } }
+    /// 0…1 closed-eye overlay.
+    var blinkAmount: CGFloat = 0 { didSet { needsDisplay = true } }
     /// Display name shown in the status-pill caption (agent id, "agent-" stripped),
     /// or nil for the generic desktop mascot. Reserves the caption band when set.
     var caption: String? { didSet { needsDisplay = true } }
@@ -40,7 +51,8 @@ final class MascotView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let frames = MascotSprite.frames
         guard !frames.isEmpty else { return }
-        let img = frames[min(frameIndex, frames.count - 1)]
+        let primaryIndex = min(max(frameIndex, 0), frames.count - 1)
+        let img = frames[primaryIndex]
 
         // Vertical bands (AppKit y-up): caption | sprite | emote.
         let capRoom = caption == nil ? 0 : captionHeight
@@ -48,24 +60,32 @@ final class MascotView: NSView {
                            width: bounds.width,
                            height: bounds.height - capRoom - emoteZone)
         let aspect = MascotSprite.aspect
-        var w = avail.width
-        var h = w / aspect
-        if h > avail.height { h = avail.height; w = h * aspect }
-        let x = avail.midX - w / 2
+        var baseW = avail.width
+        var baseH = baseW / aspect
+        if baseH > avail.height { baseH = avail.height; baseW = baseH * aspect }
+        let drawW = baseW * max(0.2, scaleX)
+        let drawH = baseH * max(0.2, scaleY)
+        let x = avail.midX - drawW / 2
         let y = avail.minY + bob
 
         // Soft contact shadow grounds the mascot on the desktop.
-        let shadowW = w * 0.55
+        let airborne = min(max(bob / 8, 0), 1)
+        let shadowW = baseW * (0.62 - airborne * 0.20)
         let shadow = NSBezierPath(ovalIn: NSRect(
             x: bounds.midX - shadowW / 2,
             y: avail.minY + 1,
             width: shadowW,
-            height: h * 0.10))
-        NSColor.black.withAlphaComponent(0.16).setFill()
+            height: baseH * (0.08 + (1 - max(0.2, scaleY)) * 0.05)))
+        NSColor.black.withAlphaComponent(0.16 - airborne * 0.05).setFill()
         shadow.fill()
 
-        img.draw(in: NSRect(x: x, y: y, width: w, height: h),
-                 from: .zero, operation: .sourceOver, fraction: 1.0)
+        let spriteRect = NSRect(x: x, y: y, width: drawW, height: drawH)
+        drawSprite(img, in: spriteRect, fraction: 1 - clamped(secondaryFrameAlpha))
+        if let secondaryFrameIndex, clamped(secondaryFrameAlpha) > 0.01 {
+            let idx = min(max(secondaryFrameIndex, 0), frames.count - 1)
+            drawSprite(frames[idx], in: spriteRect, fraction: clamped(secondaryFrameAlpha))
+        }
+        drawBlink(in: spriteRect)
 
         if let emote, !emote.isEmpty {
             let pop = 1.0 + emotePop * 0.5
@@ -74,7 +94,7 @@ final class MascotView: NSView {
             let gattrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: fontSize)]
             let gsize = glyph.size(withAttributes: gattrs)
             let gx = bounds.midX - gsize.width / 2
-            let gy = y + h - gsize.height * 0.35 + emotePop * 3
+            let gy = y + drawH - gsize.height * 0.35 + emotePop * 3
             glyph.draw(at: NSPoint(x: gx, y: min(gy, bounds.height - gsize.height)),
                        withAttributes: gattrs)
         }
@@ -82,6 +102,44 @@ final class MascotView: NSView {
         if showCaption, let caption, !caption.isEmpty {
             drawCaptionPill(caption)
         }
+    }
+
+    private func drawSprite(_ image: NSImage, in rect: NSRect, fraction: CGFloat) {
+        guard fraction > 0 else { return }
+        NSGraphicsContext.saveGraphicsState()
+        let transform = NSAffineTransform()
+        transform.translateX(by: rect.midX, yBy: rect.minY + rect.height * 0.12)
+        transform.rotate(byDegrees: rotationDegrees)
+        transform.translateX(by: -rect.midX, yBy: -(rect.minY + rect.height * 0.12))
+        transform.concat()
+        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: fraction)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func drawBlink(in rect: NSRect) {
+        let amount = clamped(blinkAmount)
+        guard amount > 0.01 else { return }
+        NSGraphicsContext.saveGraphicsState()
+        NSColor.black.withAlphaComponent(0.55 * amount).setStroke()
+        let left = NSBezierPath()
+        let right = NSBezierPath()
+        let eyeY = rect.minY + rect.height * 0.64
+        let half = rect.width * 0.055
+        let gap = rect.width * 0.13
+        left.move(to: NSPoint(x: rect.midX - gap - half, y: eyeY))
+        left.line(to: NSPoint(x: rect.midX - gap + half, y: eyeY - rect.height * 0.01 * amount))
+        right.move(to: NSPoint(x: rect.midX + gap - half, y: eyeY - rect.height * 0.01 * amount))
+        right.line(to: NSPoint(x: rect.midX + gap + half, y: eyeY))
+        for path in [left, right] {
+            path.lineWidth = max(1.2, rect.width * 0.018)
+            path.lineCapStyle = .round
+            path.stroke()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func clamped(_ value: CGFloat) -> CGFloat {
+        min(max(value, 0), 1)
     }
 
     /// A small status pill: a colour-coded dot (green running · grey idle · orange

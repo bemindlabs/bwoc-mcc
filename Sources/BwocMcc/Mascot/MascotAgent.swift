@@ -265,17 +265,28 @@ final class MascotAgent: NSObject {
     }
 
     private func beHappy(intense: Bool) {
-        view.frameIndex = 0                       // face the viewer
+        faceFront()
         view.emote = "❤️"
         view.emotePop = intense ? bouncing(speedHz: 9) : bouncing(speedHz: 4) * 0.5
-        view.bob = abs(sin(bobPhase * (intense ? 10 : 5))) * (intense ? 5 : 3)
+        let bounce = bouncing(speedHz: intense ? 4.8 : 2.4)
+        view.bob = bounce * (intense ? 8 : 3)
+        view.scaleX = 1 + bounce * (intense ? 0.09 : 0.03)
+        view.scaleY = 1 - bounce * (intense ? 0.07 : 0.02)
+        view.rotationDegrees = sin(clock * (intense ? 18 : 8)) * (intense ? 7 : 3)
+        view.blinkAmount = intense ? 0 : blinkAmount()
     }
 
     private func beAlert() {
-        view.frameIndex = 0
+        faceFront()
         view.emote = "❗"
         view.emotePop = bouncing(speedHz: 8)
-        view.bob = abs(sin(bobPhase * 11)) * 4
+        let elapsed = max(0, 3.5 - (alertUntil - clock))
+        let shock = max(0, 1 - elapsed / 0.55)
+        view.bob = shock * 7 + bouncing(speedHz: 5) * 1.5
+        view.scaleX = 1 + shock * 0.12
+        view.scaleY = 1 - shock * 0.10
+        view.rotationDegrees = sin(clock * 42) * shock * 8
+        view.blinkAmount = shock > 0.25 ? 1 : 0
     }
 
     private func beCurious(toward p: CGPoint, distance: CGFloat) {
@@ -285,8 +296,9 @@ final class MascotAgent: NSObject {
         if distance > followGap {
             walk(toward: p)                       // amble over to the cursor
         } else {
-            view.frameIndex = MascotSprite.frameIndex(headingDegrees: heading(to: p))
-            view.bob = sin(bobPhase * 2.4) * 1.5  // arrived — look up, idle
+            let h = heading(to: p)
+            setYaw(headingDegrees: h)
+            idlePose(lean: CGFloat(cos(h * .pi / 180)) * 3, sleepy: false)
         }
     }
 
@@ -297,10 +309,10 @@ final class MascotAgent: NSObject {
     }
 
     private func beSleepy() {
-        view.frameIndex = 0
+        faceFront()
         view.emote = "💤"
         view.emotePop = bouncing(speedHz: 0.6) * 0.4
-        view.bob = sin(bobPhase * 1.1) * 1.2
+        idlePose(lean: -8, sleepy: true)
     }
 
     private func beWander() {
@@ -312,8 +324,8 @@ final class MascotAgent: NSObject {
     /// The original target-seeking wander: walk to a random spot, pause, repeat.
     private func wanderStep() {
         if clock < pauseUntil {
-            view.frameIndex = 0
-            view.bob = sin(bobPhase * 2.2) * 1.5
+            faceFront()
+            idlePose(lean: 0, sleepy: false)
             return
         }
         let dx = wanderTarget.x - center.x
@@ -326,7 +338,7 @@ final class MascotAgent: NSObject {
         walk(toward: wanderTarget)
     }
 
-    /// Step `center` toward `p`, set the facing frame, and add a walking hop.
+    /// Step `center` toward `p`, set the facing frame, and add a two-beat walk.
     private func walk(toward p: CGPoint) {
         let dx = p.x - center.x, dy = p.y - center.y
         let dist = hypot(dx, dy)
@@ -334,8 +346,8 @@ final class MascotAgent: NSObject {
         let stepLen = min(speed * tick, dist)
         center.x += dx / dist * stepLen
         center.y += dy / dist * stepLen
-        view.frameIndex = MascotSprite.frameIndex(headingDegrees: heading(to: p))
-        view.bob = abs(sin(bobPhase * 7)) * 3
+        setYaw(headingDegrees: heading(to: p))
+        walkPose(dx: dx / dist)
         applyCenter()
     }
 
@@ -347,6 +359,46 @@ final class MascotAgent: NSObject {
 
     private func bouncing(speedHz: CGFloat) -> CGFloat {
         (sin(bobPhase * speedHz * 2 * .pi) + 1) / 2
+    }
+
+    private func faceFront() {
+        view.frameIndex = 0
+        view.secondaryFrameIndex = nil
+        view.secondaryFrameAlpha = 0
+    }
+
+    private func setYaw(headingDegrees heading: Double) {
+        let blend = MascotSprite.yawBlend(headingDegrees: heading)
+        view.frameIndex = blend.primary
+        view.secondaryFrameIndex = blend.secondary
+        view.secondaryFrameAlpha = blend.fraction
+    }
+
+    private func idlePose(lean: CGFloat, sleepy: Bool) {
+        let breath = sin(clock * (sleepy ? 0.75 : 1.35) * 2 * .pi)
+        view.bob = breath * (sleepy ? 0.7 : 1.2)
+        view.scaleX = 1 - breath * (sleepy ? 0.010 : 0.018)
+        view.scaleY = 1 + breath * (sleepy ? 0.024 : 0.032)
+        view.rotationDegrees = lean + breath * (sleepy ? 0.8 : 1.2)
+        view.blinkAmount = sleepy ? 0.85 : blinkAmount()
+    }
+
+    private func walkPose(dx: CGFloat) {
+        let stride = bobPhase * 2.25 * 2 * .pi
+        let lift = abs(sin(stride))
+        let plant = pow(max(0, cos(stride * 2)), 2)
+        view.bob = lift * 4.2
+        view.scaleX = 1 + plant * 0.045 - lift * 0.018
+        view.scaleY = 1 - plant * 0.050 + lift * 0.025
+        view.rotationDegrees = dx * 4 + sin(stride) * 1.6
+        view.blinkAmount = 0
+    }
+
+    private func blinkAmount() -> CGFloat {
+        let period: CGFloat = 4.8
+        let t = clock.truncatingRemainder(dividingBy: period)
+        guard t < 0.16 else { return 0 }
+        return sin((t / 0.16) * .pi)
     }
 
     private func pickWanderTarget() {
