@@ -18,6 +18,8 @@ struct ContentView: View {
 
     @AppStorage("refreshInterval") private var refreshInterval: Double = 5
 
+    @ObservedObject private var mascots = MascotManager.shared
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
@@ -73,6 +75,14 @@ struct ContentView: View {
                 Button("Quit") { NSApp.terminate(nil) }
                     .keyboardShortcut("q")
                 Spacer()
+                Button {
+                    mascots.toggleDesktopMascot()
+                } label: {
+                    Image(systemName: mascots.desktopMascotShown ? "sparkles" : "sparkle")
+                }
+                .help(mascots.desktopMascotShown
+                    ? "Dismiss the desktop mascot"
+                    : "Spawn a mascot that wanders the screen (drag to move · double-click to dismiss)")
                 Button {
                     teamMode.toggle()
                     if !teamMode { teamSelection.removeAll() }
@@ -261,7 +271,9 @@ struct ContentView: View {
         isRefreshing = true
         defer { isRefreshing = false }
         do {
-            snapshot = try await BwocCli.shared.list()
+            let snap = try await BwocCli.shared.list()
+            snapshot = snap
+            mascots.updateFleet(snap)   // keep agent mascots' running-state live
             lastError = nil
         } catch {
             lastError = "bwoc list failed: \(error.localizedDescription)"
@@ -274,6 +286,8 @@ struct ContentView: View {
             // Read .scrum/ off the main actor — it's blocking file IO.
             scrum = await Task.detached { ScrumReader.read(workspace: ws) }.value
         }
+        // Feed blocked agents to mascots for the orange caption dot.
+        mascots.updateBlocked(scrum?.blockedAgents ?? [])
     }
 }
 
@@ -359,6 +373,7 @@ private struct AgentRow: View {
     @State private var expanded = false
     @State private var messages: [InboxMessage] = []
     @State private var loadingInbox = false
+    @ObservedObject private var mascots = MascotManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -445,6 +460,14 @@ private struct AgentRow: View {
             }
             .buttonStyle(.borderless)
             .help("Stream inbox + log")
+            Button(action: { mascots.toggleAgentMascot(agent.id) }) {
+                Image(systemName: mascots.isShown(agent.id) ? "sparkles" : "sparkle")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(mascots.isShown(agent.id) ? Color.pink : Color.secondary)
+            .help(mascots.isShown(agent.id)
+                ? "Recall \(agent.id)'s desktop mascot"
+                : "Send \(agent.id) out as a desktop mascot")
             actionButton(.chat, help: agent.supportsChatWindow
                 ? "Open native chat window (bwoc-chat)"
                 : "Open chat in Terminal")

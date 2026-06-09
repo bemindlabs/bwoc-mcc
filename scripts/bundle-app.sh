@@ -19,8 +19,12 @@ STAGE="${DIST}/${APP_NAME}.app"
 
 echo "▸ assembling ${APP_NAME}.app (v${VER})…" >&2
 rm -rf "$DIST"
-mkdir -p "$STAGE/Contents/MacOS"
+mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
 cp "$BIN" "$STAGE/Contents/MacOS/${APP_NAME}"
+
+# Ship the desktop-mascot sprite atlas as a plain Resources file (Bundle.main),
+# not a SwiftPM .bundle — codesign rejects the flat bundle as malformed.
+cp "Sources/${APP_NAME}/Resources/mascot_sheet.png" "$STAGE/Contents/Resources/"
 cat >"$STAGE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -42,7 +46,9 @@ cat >"$STAGE/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "▸ codesigning (ad-hoc)…" >&2
-codesign --force --deep --sign - "$STAGE" 1>&2
+# No --deep: the nested SwiftPM resource bundle is a flat data dir (no Contents/)
+# that codesign --deep rejects; it's sealed as a resource of the app signature.
+codesign --force --sign - "$STAGE" 1>&2
 
 ZIP="${DIST}/${APP_NAME}-${VER}-universal.zip"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$STAGE" "$ZIP"
