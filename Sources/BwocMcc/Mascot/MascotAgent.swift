@@ -457,13 +457,11 @@ final class MascotAgent: NSObject {
     }
 
     private func refreshBubbleForHover() {
-        if let message {
+        // Hover re-surfaces the last *real* inbox message only. Status (running /
+        // idle / blocked) now lives in the caption pill, so don't synthesize a
+        // status bubble — that would double up with the pill on hover.
+        if message != nil {
             messageUntil = max(messageUntil, clock + 4)
-            _ = message
-        } else if agentID != nil {
-            let running = statusProvider?()?.running ?? false
-            message = running ? "ทำงานอยู่… ⚙️" : "ว่างอยู่ 🌸"
-            messageUntil = clock + 4
         }
     }
 

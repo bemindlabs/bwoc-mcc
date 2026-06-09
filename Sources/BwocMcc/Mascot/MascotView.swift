@@ -118,7 +118,9 @@ final class MascotView: NSView {
 
     private func drawBlink(in rect: NSRect) {
         let amount = clamped(blinkAmount)
-        guard amount > 0.01 else { return }
+        // Eyelid positions are calibrated for the front view; skip on side/back
+        // frames and during a strong yaw cross-fade so the lids never float.
+        guard amount > 0.01, frameIndex == 0, clamped(secondaryFrameAlpha) < 0.35 else { return }
         NSGraphicsContext.saveGraphicsState()
         NSColor.black.withAlphaComponent(0.55 * amount).setStroke()
         let left = NSBezierPath()
