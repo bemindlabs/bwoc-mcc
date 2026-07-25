@@ -34,7 +34,7 @@ workflow.
   inbox count, refreshed every 5 seconds.
 - 🟢 **Running vs idle** — color dot per agent mirrors `bwoc sessions`.
 - 📥 **Inbox badges** — pending message count surfaced inline; click through to
-  preview *(planned)*.
+  a live inbox preview in the agent detail window.
 - ⚡ **Quick actions** — spawn, chat, stop, start, supervise without leaving the
   menu bar.
 - 💬 **Native chat windows** — the chat action opens a
@@ -42,6 +42,10 @@ workflow.
   harness-backed agents (`ollama` / `openai-compatible`); vendor-CLI agents
   fall back to `bwoc chat` in Terminal.
 - 🏠 **Workspace summary** — workspace path + total agents, always visible.
+- 🐾 **Desktop mascot** — send a wandering agent-pet onto the desktop: a small
+  free-roaming sprite that reads live fleet state (running / unread / scrum
+  blocker), captioned with its agent id and re-assignable from its right-click
+  menu. Spawn a generic desktop mascot or one bound to a specific agent.
 - 🪶 **Native + lightweight** — pure SwiftUI `MenuBarExtra`, no Electron, no
   background daemons beyond `bwoc` itself.
 
@@ -144,8 +148,10 @@ inboxes, and (soon) scrum state. Out of scope:
 ## Status
 
 **Alpha** — the scaffold builds, launches, and renders the live fleet from
-`bwoc list --json`. Quick actions, sessions view, inbox preview, and scrum
-integration are tracked under `BWOC-EPIC-5` in the BWOC workspace.
+`bwoc list --json`. The `BWOC-EPIC-5` workstream has landed: quick actions
+(`BwocCli.Action` / `runAction`), the sessions view (`SessionsSection`), the
+inbox preview (`AgentDetailWindow` streaming `StreamKind.inbox`), and scrum
+integration (`ScrumStrip` / `ScrumReader`) all ship. The desktop mascot is in.
 
 ## Contributing
 
