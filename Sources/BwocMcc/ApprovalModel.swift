@@ -22,12 +22,17 @@ final class ApprovalModel: ObservableObject {
         pending = await Task.detached { inbox.pending() }.value
     }
 
-    /// Record the operator's verdict and drop it from the local queue at once —
-    /// the harness deletes the files on consume, so optimistic removal keeps the
-    /// UI responsive without waiting for the next poll.
-    func decide(_ req: ApprovalRequest, allow: Bool, always: Bool, workspace: String) {
-        ApprovalInbox(workspace: workspace)
+    /// Record the operator's verdict. Drops it from the local queue **only when
+    /// the write reaches disk**, so a failed verdict stays visible (and retryable)
+    /// rather than vanishing as if it had been delivered. Returns whether it was
+    /// written.
+    @discardableResult
+    func decide(_ req: ApprovalRequest, allow: Bool, always: Bool, workspace: String) -> Bool {
+        let ok = ApprovalInbox(workspace: workspace)
             .decide(req, allow: allow, always: always, by: ApprovalInbox.operatorIdentity)
-        pending.removeAll { $0.id == req.id }
+        if ok {
+            pending.removeAll { $0.id == req.id }
+        }
+        return ok
     }
 }

@@ -75,15 +75,23 @@ public struct ApprovalInbox: Sendable {
     }
 
     /// Write the operator's verdict for `req` atomically. `by` records who
-    /// decided (provenance only). No-op on encode/IO failure — the harness falls
-    /// back to fail-safe on timeout, so a dropped verdict never opens a hole.
-    public func decide(_ req: ApprovalRequest, allow: Bool, always: Bool = false, by: String) {
+    /// decided (provenance only). Returns `true` iff the verdict reached disk —
+    /// the caller keeps the request visible on failure so a dropped write is
+    /// never mistaken for a delivered decision (the harness still fail-safes on
+    /// timeout, so a hole never opens either way).
+    @discardableResult
+    public func decide(_ req: ApprovalRequest, allow: Bool, always: Bool = false, by: String) -> Bool {
         try? FileManager.default.createDirectory(
             at: decidedDir, withIntermediateDirectories: true
         )
         let decision = ApprovalDecision(allow: allow, always: always, by: by)
-        guard let data = try? JSONEncoder().encode(decision) else { return }
-        try? data.write(to: decidedDir.appendingPathComponent("\(req.id).json"), options: .atomic)
+        guard let data = try? JSONEncoder().encode(decision) else { return false }
+        do {
+            try data.write(to: decidedDir.appendingPathComponent("\(req.id).json"), options: .atomic)
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// A stable "who" string for the `by` field, e.g. `alice@studio.local`.
