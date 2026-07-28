@@ -227,6 +227,60 @@ do {
     check("Agent decodes without uptime/incarnated", false, "\(error)")
 }
 
+// 13. ApprovalRequest decodes the exact shape the harness emits (snake_case).
+let approvalJSON = #"""
+{
+  "id": "1753000000000-4242-0",
+  "agent": "agent-jisoo",
+  "tool": "run_command",
+  "args_preview": "{\"command\":\"cargo test\"}",
+  "trust": "Untrusted",
+  "ts_ms": 1753000000000,
+  "timeout_s": 300
+}
+"""#
+do {
+    let req = try JSONDecoder().decode(ApprovalRequest.self, from: Data(approvalJSON.utf8))
+    check("ApprovalRequest.id maps", req.id == "1753000000000-4242-0")
+    check("ApprovalRequest.argsPreview maps from snake_case", req.argsPreview.contains("cargo test"))
+    check("ApprovalRequest.tool maps", req.tool == "run_command")
+    check("ApprovalRequest.timeoutS maps from snake_case", req.timeoutS == 300)
+} catch {
+    check("ApprovalRequest decodes harness shape", false, "\(error)")
+}
+
+// 14. ApprovalDecision encodes the exact keys the harness (serde) reads.
+do {
+    let data = try JSONEncoder().encode(ApprovalDecision(allow: true, always: false, by: "op@mac"))
+    let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    check("ApprovalDecision encodes allow/always/by",
+          obj?["allow"] as? Bool == true
+            && obj?["always"] as? Bool == false
+            && obj?["by"] as? String == "op@mac")
+} catch {
+    check("ApprovalDecision encodes", false, "\(error)")
+}
+
+// 15. ApprovalInbox round-trips a pending request → decided verdict on disk.
+do {
+    let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("mcc-approval-\(UUID().uuidString)")
+    let pending = tmp.appendingPathComponent(".bwoc/approvals/pending")
+    try FileManager.default.createDirectory(at: pending, withIntermediateDirectories: true)
+    try Data(approvalJSON.utf8).write(to: pending.appendingPathComponent("req.json"))
+    let inbox = ApprovalInbox(workspace: tmp.path)
+    let got = inbox.pending()
+    check("ApprovalInbox lists the pending request", got.count == 1 && got.first?.tool == "run_command")
+    if let req = got.first {
+        inbox.decide(req, allow: true, always: false, by: "op@mac")
+        let decided = tmp.appendingPathComponent(".bwoc/approvals/decided/\(req.id).json")
+        check("ApprovalInbox writes decided/<id>.json", FileManager.default.fileExists(atPath: decided.path))
+    }
+    try? FileManager.default.removeItem(at: tmp)
+} catch {
+    check("ApprovalInbox round-trip", false, "\(error)")
+}
+
 if failures.isEmpty {
     print("\nall checks passed")
     exit(0)

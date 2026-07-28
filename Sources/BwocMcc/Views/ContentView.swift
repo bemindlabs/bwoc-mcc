@@ -19,10 +19,21 @@ struct ContentView: View {
     @AppStorage("refreshInterval") private var refreshInterval: Double = 5
 
     @ObservedObject private var mascots = MascotManager.shared
+    @ObservedObject private var approvals = ApprovalModel.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
+            if !approvals.pending.isEmpty {
+                ApprovalSection(
+                    requests: approvals.pending,
+                    onDecide: { req, allow, always in
+                        guard let ws = snapshot?.workspace else { return }
+                        approvals.decide(req, allow: allow, always: always, workspace: ws)
+                    }
+                )
+                Divider()
+            }
             if let scrum {
                 ScrumStrip(state: scrum)
             }
@@ -288,6 +299,89 @@ struct ContentView: View {
         }
         // Feed blocked agents to mascots for the orange caption dot.
         mascots.updateBlocked(scrum?.blockedAgents ?? [])
+        // Poll the human-in-the-loop approval queue on the same cadence.
+        await approvals.refresh(workspace: snapshot?.workspace)
+    }
+}
+
+/// Human-in-the-loop approval queue — one card per pending gated tool call, with
+/// Deny / Always / Approve. Shown only when the harness has raised requests
+/// (`--approval-channel`).
+private struct ApprovalSection: View {
+    let requests: [ApprovalRequest]
+    /// `(request, allow, always)`.
+    let onDecide: (ApprovalRequest, Bool, Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "hand.raised.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                Text("Approvals").font(.caption.bold())
+                Spacer()
+                Text("\(requests.count) pending")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(requests) { req in
+                ApprovalRow(req: req, onDecide: onDecide)
+            }
+        }
+    }
+}
+
+private struct ApprovalRow: View {
+    let req: ApprovalRequest
+    let onDecide: (ApprovalRequest, Bool, Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(req.tool)
+                    .font(.system(.caption, design: .monospaced).bold())
+                if !req.trust.isEmpty {
+                    Text(req.trust)
+                        .font(.system(size: 9))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(.orange.opacity(0.25)))
+                }
+                Spacer()
+                Text(req.agent)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            if !req.argsPreview.isEmpty {
+                Text(req.argsPreview)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+            HStack(spacing: 6) {
+                Button(role: .destructive) { onDecide(req, false, false) } label: {
+                    Label("Deny", systemImage: "xmark").font(.caption2)
+                }
+                .controlSize(.small)
+                Button { onDecide(req, true, true) } label: {
+                    Text("Always").font(.caption2)
+                }
+                .controlSize(.small)
+                .help("Allow and remember (persisted per-session)")
+                Spacer()
+                Button { onDecide(req, true, false) } label: {
+                    Label("Approve", systemImage: "checkmark").font(.caption2)
+                }
+                .controlSize(.small)
+                .tint(.green)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(6)
+        .background(RoundedRectangle(cornerRadius: 6).fill(.orange.opacity(0.08)))
     }
 }
 

@@ -42,6 +42,12 @@ terminal เลยค่ะ
   (`ollama` / `openai-compatible`); เอเจนต์ backend แบบ vendor-CLI จะ fall back ไป
   `bwoc chat` ใน Terminal
 - 🏠 **สรุป workspace** — path workspace + จำนวนเอเจนต์รวม, เห็นตลอด
+- 🙋 **Approval console** — human-in-the-loop supervision. เมื่อเอเจนต์ fleet แบบ
+  headless (รันด้วย `--approval-channel`) ชนเครื่องมือโหมด `ask` โดยไม่มี TTY,
+  คำขอจะโผล่เป็นการ์ดบน menu bar — เครื่องมือ, เอเจนต์, trust, preview อาร์กิวเมนต์ —
+  พร้อมปุ่ม **Approve / Deny / Always**. จุดสีส้มบนดอกบัวแจ้งว่ามีคำขอค้าง. คำตัดสิน
+  เปลี่ยนได้แค่จาก would-be deny → allow ที่คนอนุมัติ; ถ้า timeout จะ fall back ไป
+  fail-safe ของ harness
 - 🪶 **Native + เบา** — ใช้ SwiftUI `MenuBarExtra` ล้วน ๆ ไม่มี Electron
   ไม่มี daemon เพิ่มเติมนอกจาก `bwoc` เอง
 

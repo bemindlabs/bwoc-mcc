@@ -42,6 +42,12 @@ workflow.
   harness-backed agents (`ollama` / `openai-compatible`); vendor-CLI agents
   fall back to `bwoc chat` in Terminal.
 - 🏠 **Workspace summary** — workspace path + total agents, always visible.
+- 🙋 **Approval console** — human-in-the-loop supervision. When a headless fleet
+  agent (run with `--approval-channel`) hits an `ask`-mode tool with no TTY, the
+  request surfaces as a card in the menu bar — tool, agent, trust, argument
+  preview — with **Approve / Deny / Always**. An orange dot on the lotus flags
+  pending requests. A verdict can only turn a would-be deny into an approved
+  allow; a timeout falls back to the harness fail-safe.
 - 🐾 **Desktop mascot** — send a wandering agent-pet onto the desktop: a small
   free-roaming sprite that reads live fleet state (running / unread / scrum
   blocker), captioned with its agent id and re-assignable from its right-click

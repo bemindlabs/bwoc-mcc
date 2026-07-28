@@ -9,7 +9,7 @@ struct BwocMccApp: App {
         MenuBarExtra {
             ContentView()
         } label: {
-            Image(nsImage: LotusIcon.image)
+            MenuBarLabel()
         }
         .menuBarExtraStyle(.window)
 
@@ -28,6 +28,23 @@ struct BwocMccApp: App {
         }
         .defaultSize(width: 400, height: 340)
         .windowResizability(.contentSize)
+    }
+}
+
+/// The menu-bar icon: the lotus, with an orange dot when the harness has raised
+/// pending approval requests (observes the shared [`ApprovalModel`]).
+private struct MenuBarLabel: View {
+    @ObservedObject private var approvals = ApprovalModel.shared
+
+    var body: some View {
+        Image(nsImage: LotusIcon.image)
+            .overlay(alignment: .topTrailing) {
+                if !approvals.pending.isEmpty {
+                    Circle()
+                        .fill(.orange)
+                        .frame(width: 6, height: 6)
+                }
+            }
     }
 }
 
