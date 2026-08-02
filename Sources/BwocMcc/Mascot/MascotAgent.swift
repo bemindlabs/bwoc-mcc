@@ -354,7 +354,13 @@ final class MascotAgent: NSObject {
     /// Movement heading toward `p`, in the screen-flipped degrees MascotSprite
     /// expects (y-down). Screen y is up in AppKit, so negate dy.
     private func heading(to p: CGPoint) -> Double {
-        atan2(-(p.y - center.y), p.x - center.x) * 180 / .pi
+        // Force the Double overload of atan2 + Double literals: the CGFloat/Double
+        // mix left `* 180 / .pi` ambiguous under older (macos-14 CI) Swift, an
+        // error that only the full app-target build surfaced. Screen y is up in
+        // AppKit, so `center.y - p.y` is the y-down delta the sprite expects.
+        let dyDown = Double(center.y - p.y)
+        let dx = Double(p.x - center.x)
+        return atan2(dyDown, dx) * 180 / .pi
     }
 
     private func bouncing(speedHz: CGFloat) -> CGFloat {
