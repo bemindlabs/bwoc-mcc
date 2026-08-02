@@ -408,7 +408,19 @@ final class MascotAgent: NSObject {
     }
 
     private func pickWanderTarget() {
-        let area = visibleArea()
+        // Roam across every display. Most targets stay on the current screen, but
+        // sometimes the mascot heads for another one — so on a multi-monitor
+        // setup it can actually cross to the main (or any) screen instead of
+        // being stuck on the display it spawned on.
+        let screens = NSScreen.screens
+        let current = screen(near: center)
+        let target: NSScreen
+        if screens.count > 1, CGFloat.random(in: 0...1) < 0.35 {
+            target = screens.filter { $0 != current }.randomElement() ?? current
+        } else {
+            target = current
+        }
+        let area = wanderArea(of: target)
         let lowerTop = area.minY + area.height * 0.45   // stay near the "ground"
         wanderTarget = CGPoint(
             x: CGFloat.random(in: area.minX...area.maxX),
@@ -503,17 +515,39 @@ final class MascotAgent: NSObject {
         return "\(from) ▸ \(capped)"
     }
 
-    // MARK: - Geometry
+    // MARK: - Geometry (multi-screen aware)
 
-    private func visibleArea() -> CGRect {
-        let screen = NSScreen.screens.first { $0.frame.contains(center) }
-            ?? NSScreen.main ?? NSScreen.screens.first!
-        let v = screen.visibleFrame
-        return v.insetBy(dx: panel.frame.width / 2, dy: panel.frame.height / 2)
+    /// The screen whose frame contains `p`; otherwise the screen nearest to `p`
+    /// (so a point in the gap between misaligned monitors resolves to a real
+    /// display instead of snapping to `main`), else `main`.
+    private func screen(near p: CGPoint) -> NSScreen {
+        if let s = NSScreen.screens.first(where: { $0.frame.contains(p) }) { return s }
+        return NSScreen.screens.min {
+            Self.squaredDistance(p, $0.frame) < Self.squaredDistance(p, $1.frame)
+        } ?? NSScreen.main ?? NSScreen.screens[0]
     }
 
+    /// Squared distance from `p` to the nearest point of `r` (0 when inside).
+    private static func squaredDistance(_ p: CGPoint, _ r: CGRect) -> CGFloat {
+        let dx = p.x - min(max(p.x, r.minX), r.maxX)
+        let dy = p.y - min(max(p.y, r.minY), r.maxY)
+        return dx * dx + dy * dy
+    }
+
+    /// The wanderable rect of `s`: its `visibleFrame` inset by half the panel so
+    /// the sprite never clips off the edge.
+    private func wanderArea(of s: NSScreen) -> CGRect {
+        s.visibleFrame.insetBy(dx: panel.frame.width / 2, dy: panel.frame.height / 2)
+    }
+
+    /// Wanderable rect of the screen the mascot is currently on (ground ref).
+    private func visibleArea() -> CGRect { wanderArea(of: screen(near: center)) }
+
+    /// Clamp to the screen nearest `center` — not a single fixed screen — so a
+    /// drag onto any display (including `main`) sticks, and a drop in the gap
+    /// between monitors snaps to the closest real screen.
     private func clampCenter() {
-        let area = visibleArea()
+        let area = wanderArea(of: screen(near: center))
         center.x = min(max(center.x, area.minX), area.maxX)
         center.y = min(max(center.y, area.minY), area.maxY)
     }
