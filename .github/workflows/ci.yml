@@ -1,0 +1,38 @@
+name: ci
+
+# Per-commit gate. Runs on the same macOS image the release uses, so an
+# app-target compile error is caught here on the PR instead of blowing up at
+# "Build universal app bundle" during a release.
+#
+# The gap this closes: `swift run CoreChecks` only builds BwocMccCore + tests,
+# never the BwocMcc (SwiftUI) app target — so app-target breakage shipped
+# silently until release time. `swift build` builds every target (CoreChecks,
+# BwocMccCore, BwocMcc), so the whole package is gated.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build + checks
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # Builds all targets — including the BwocMcc app target the release-only
+      # bundle step used to be the first to compile.
+      - name: Build (all targets)
+        run: swift build
+
+      - name: Core checks
+        run: swift run CoreChecks
