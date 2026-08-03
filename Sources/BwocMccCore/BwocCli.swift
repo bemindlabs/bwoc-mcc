@@ -342,10 +342,16 @@ public actor BwocCli {
         let timedOut = TimeoutFlag()
         let timeoutTask = Task.detached {
             try? await Task.sleep(nanoseconds: UInt64(Self.commandTimeout * 1_000_000_000))
-            if process.isRunning {
-                timedOut.set()
-                process.terminate()
-            }
+            guard process.isRunning else { return }
+            timedOut.set()
+            process.terminate()   // SIGTERM — graceful
+            // A child that ignores SIGTERM (blocked on a lock, signal-masked)
+            // keeps its stdout pipe open, so the drains never reach EOF and
+            // capture() would hang forever despite the "timeout". Escalate to
+            // SIGKILL, which can't be caught → the pipe closes → the reads
+            // unblock and capture() returns with the timeout error.
+            try? await Task.sleep(nanoseconds: UInt64(Self.terminateGrace * 1_000_000_000))
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
         }
 
         // Drain both pipes on background threads *while the child runs*. Reading
@@ -375,6 +381,9 @@ public actor BwocCli {
     /// through capture() (list / sessions / inbox / start / stop) all return in
     /// well under a second; interactive flows go through Terminal, not here.
     private static let commandTimeout: TimeInterval = 20
+
+    /// Grace between SIGTERM and the SIGKILL escalation in the timeout path.
+    private static let terminateGrace: TimeInterval = 2
 
     private static func readToEnd(_ handle: FileHandle) async -> Data {
         await withCheckedContinuation { (cont: CheckedContinuation<Data, Never>) in
