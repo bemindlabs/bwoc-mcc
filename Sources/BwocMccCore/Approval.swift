@@ -67,11 +67,29 @@ public struct ApprovalInbox: Sendable {
         let decoder = JSONDecoder()
         return files
             .filter { $0.pathExtension == "json" }
-            .compactMap { url in
-                guard let data = try? Data(contentsOf: url) else { return nil }
-                return try? decoder.decode(ApprovalRequest.self, from: data)
+            .compactMap { url -> ApprovalRequest? in
+                guard
+                    let data = try? Data(contentsOf: url),
+                    let req = try? decoder.decode(ApprovalRequest.self, from: data),
+                    // The harness names the file `<id>.json`; require the embedded
+                    // id to match the on-disk stem so a torn/crafted file can't
+                    // make us act on an id that differs from its filename.
+                    url.deletingPathExtension().lastPathComponent == req.id
+                else { return nil }
+                return req
             }
             .sorted { $0.tsMs < $1.tsMs }
+    }
+
+    /// A safe single filename component: non-empty, not hidden, no path
+    /// separators or `..`. Guards the untrusted `id` (from a pending file's JSON
+    /// body) before it is spliced into a path under `decided/`.
+    public static func isSafeId(_ id: String) -> Bool {
+        !id.isEmpty
+            && !id.hasPrefix(".")
+            && !id.contains("/")
+            && !id.contains("\\")
+            && !id.contains("\0")
     }
 
     /// Write the operator's verdict for `req` atomically. `by` records who
@@ -81,6 +99,15 @@ public struct ApprovalInbox: Sendable {
     /// timeout, so a hole never opens either way).
     @discardableResult
     public func decide(_ req: ApprovalRequest, allow: Bool, always: Bool = false, by: String) -> Bool {
+        // The id becomes a filename under `decided/` — reject anything that could
+        // escape it (path traversal), never write outside the approvals dir.
+        guard Self.isSafeId(req.id) else { return false }
+        // Only decide a request that is *still pending*. If the harness already
+        // timed out (fail-safe-denied) and removed `pending/<id>.json`, writing a
+        // verdict now would orphan a file no one consumes — and could later read
+        // as a live allow. The UI queue can be seconds stale, so re-check disk.
+        let pendingFile = pendingDir.appendingPathComponent("\(req.id).json")
+        guard FileManager.default.fileExists(atPath: pendingFile.path) else { return false }
         try? FileManager.default.createDirectory(
             at: decidedDir, withIntermediateDirectories: true
         )

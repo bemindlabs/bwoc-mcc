@@ -113,8 +113,9 @@ final class MascotAgent: NSObject {
 
     /// Place the mascot at the bottom-centre of the active screen and start it.
     func spawn() {
-        let area = visibleArea()
-        center = CGPoint(x: area.midX, y: area.minY + panel.frame.height / 2 + 20)
+        if let area = visibleArea() {
+            center = CGPoint(x: area.midX, y: area.minY + panel.frame.height / 2 + 20)
+        }
         applyCenter()
         panel.orderFrontRegardless()
         pickWanderTarget()
@@ -413,7 +414,7 @@ final class MascotAgent: NSObject {
         // setup it can actually cross to the main (or any) screen instead of
         // being stuck on the display it spawned on.
         let screens = NSScreen.screens
-        let current = screen(near: center)
+        guard let current = screen(near: center) else { return } // no display → stay put
         let target: NSScreen
         if screens.count > 1, CGFloat.random(in: 0...1) < 0.35 {
             target = screens.filter { $0 != current }.randomElement() ?? current
@@ -519,12 +520,14 @@ final class MascotAgent: NSObject {
 
     /// The screen whose frame contains `p`; otherwise the screen nearest to `p`
     /// (so a point in the gap between misaligned monitors resolves to a real
-    /// display instead of snapping to `main`), else `main`.
-    private func screen(near p: CGPoint) -> NSScreen {
+    /// display instead of snapping to `main`), else `main`. `nil` only when
+    /// there are **no** active displays (clamshell / all asleep / locked) — the
+    /// callers no-op in that case rather than crash (never index `screens[0]`).
+    private func screen(near p: CGPoint) -> NSScreen? {
         if let s = NSScreen.screens.first(where: { $0.frame.contains(p) }) { return s }
         return NSScreen.screens.min {
             Self.squaredDistance(p, $0.frame) < Self.squaredDistance(p, $1.frame)
-        } ?? NSScreen.main ?? NSScreen.screens[0]
+        } ?? NSScreen.main
     }
 
     /// Squared distance from `p` to the nearest point of `r` (0 when inside).
@@ -541,13 +544,14 @@ final class MascotAgent: NSObject {
     }
 
     /// Wanderable rect of the screen the mascot is currently on (ground ref).
-    private func visibleArea() -> CGRect { wanderArea(of: screen(near: center)) }
+    /// `nil` when there are no active displays.
+    private func visibleArea() -> CGRect? { screen(near: center).map(wanderArea(of:)) }
 
     /// Clamp to the screen nearest `center` — not a single fixed screen — so a
     /// drag onto any display (including `main`) sticks, and a drop in the gap
     /// between monitors snaps to the closest real screen.
     private func clampCenter() {
-        let area = wanderArea(of: screen(near: center))
+        guard let area = visibleArea() else { return }
         center.x = min(max(center.x, area.minX), area.maxX)
         center.y = min(max(center.y, area.minY), area.maxY)
     }

@@ -267,7 +267,10 @@ do {
         .appendingPathComponent("mcc-approval-\(UUID().uuidString)")
     let pending = tmp.appendingPathComponent(".bwoc/approvals/pending")
     try FileManager.default.createDirectory(at: pending, withIntermediateDirectories: true)
-    try Data(approvalJSON.utf8).write(to: pending.appendingPathComponent("req.json"))
+    // The harness names the file `<id>.json` — match that (pending() now requires
+    // the on-disk stem to equal the embedded id).
+    try Data(approvalJSON.utf8).write(
+        to: pending.appendingPathComponent("1753000000000-4242-0.json"))
     let inbox = ApprovalInbox(workspace: tmp.path)
     let got = inbox.pending()
     check("ApprovalInbox lists the pending request", got.count == 1 && got.first?.tool == "run_command")
@@ -279,6 +282,46 @@ do {
     try? FileManager.default.removeItem(at: tmp)
 } catch {
     check("ApprovalInbox round-trip", false, "\(error)")
+}
+
+// 16. isSafeId rejects anything that could escape the decided/ dir.
+check("isSafeId accepts a normal harness id", ApprovalInbox.isSafeId("1753000000000-4242-0"))
+for bad in ["", "..", "../evil", "a/b", "a\\b", ".hidden", "x/../y"] {
+    check("isSafeId rejects \(bad.isEmpty ? "<empty>" : bad)", !ApprovalInbox.isSafeId(bad))
+}
+
+// 17. decide() refuses to write when the request is no longer pending (avoids
+//     orphaned decided/<id>.json for an already-timed-out request).
+do {
+    let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("mcc-approval-\(UUID().uuidString)")
+    let pending = tmp.appendingPathComponent(".bwoc/approvals/pending")
+    try FileManager.default.createDirectory(at: pending, withIntermediateDirectories: true)
+    // Note: NO pending file written — simulate a request that already timed out.
+    let req = try JSONDecoder().decode(ApprovalRequest.self, from: Data(approvalJSON.utf8))
+    let inbox = ApprovalInbox(workspace: tmp.path)
+    let wrote = inbox.decide(req, allow: true, always: false, by: "op@mac")
+    let decided = tmp.appendingPathComponent(".bwoc/approvals/decided/\(req.id).json")
+    check("decide() returns false when not pending", wrote == false)
+    check("decide() writes no orphan when not pending",
+          !FileManager.default.fileExists(atPath: decided.path))
+    try? FileManager.default.removeItem(at: tmp)
+} catch {
+    check("decide() not-pending guard", false, "\(error)")
+}
+
+// 18. pending() skips a file whose name doesn't match its embedded id.
+do {
+    let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("mcc-approval-\(UUID().uuidString)")
+    let pending = tmp.appendingPathComponent(".bwoc/approvals/pending")
+    try FileManager.default.createDirectory(at: pending, withIntermediateDirectories: true)
+    // id in the JSON is "1753000000000-4242-0" but the file is named otherwise.
+    try Data(approvalJSON.utf8).write(to: pending.appendingPathComponent("mismatch.json"))
+    check("pending() drops filename/id mismatch", ApprovalInbox(workspace: tmp.path).pending().isEmpty)
+    try? FileManager.default.removeItem(at: tmp)
+} catch {
+    check("pending() mismatch guard", false, "\(error)")
 }
 
 if failures.isEmpty {

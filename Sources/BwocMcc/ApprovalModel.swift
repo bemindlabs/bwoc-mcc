@@ -9,6 +9,11 @@ final class ApprovalModel: ObservableObject {
 
     @Published private(set) var pending: [ApprovalRequest] = []
 
+    /// Set when the last `decide` did NOT reach disk (expired request, or a
+    /// write error) so the UI can tell the operator their click had no effect,
+    /// instead of the verdict silently vanishing. Cleared on a successful decide.
+    @Published var lastError: String?
+
     private init() {}
 
     /// Re-read the pending queue for `workspace`. Directory scan + JSON decode
@@ -32,6 +37,10 @@ final class ApprovalModel: ObservableObject {
             .decide(req, allow: allow, always: always, by: ApprovalInbox.operatorIdentity)
         if ok {
             pending.removeAll { $0.id == req.id }
+            lastError = nil
+        } else {
+            lastError = "Couldn't record the decision for \(req.tool) — it was NOT delivered "
+                + "(the request may have expired, or the write failed). It stays in the queue."
         }
         return ok
     }
