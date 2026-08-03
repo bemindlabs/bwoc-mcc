@@ -32,6 +32,12 @@ struct ContentView: View {
                         approvals.decide(req, allow: allow, always: always, workspace: ws)
                     }
                 )
+                if let err = approvals.lastError {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Divider()
             }
             if let scrum {
