@@ -43,10 +43,19 @@ final class StreamController: ObservableObject {
     private var process: Process?
     private var buffer = LineBuffer()
     private let maxLines = 2000
+    /// Bumped on every `start`/`stop`. Handler callbacks hop to the main actor
+    /// asynchronously, so a read/termination callback dispatched for an old
+    /// process can run *after* a new `start` reset `lines`. Each callback carries
+    /// the generation it was armed under and no-ops if it no longer matches —
+    /// stale bytes (or a stale `finish`) can't leak into the current stream.
+    private var generation = 0
 
     func start(kind: StreamKind, agent: String) async {
         stop()
+        generation &+= 1
+        let gen = generation
         lines = []
+        buffer = LineBuffer()
         guard let path = await BwocCli.shared.binaryPath() else {
             lines = ["bwoc binary not found on PATH"]
             return
@@ -69,10 +78,16 @@ final class StreamController: ObservableObject {
                 return
             }
             guard let chunk = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in self?.ingest(chunk) }
+            Task { @MainActor [weak self] in
+                guard let self, self.generation == gen else { return }
+                self.ingest(chunk)
+            }
         }
         proc.terminationHandler = { [weak self] _ in
-            Task { @MainActor [weak self] in self?.finish() }
+            Task { @MainActor [weak self] in
+                guard let self, self.generation == gen else { return }
+                self.finish()
+            }
         }
 
         do {
@@ -93,6 +108,7 @@ final class StreamController: ObservableObject {
         }
         process = nil
         running = false
+        generation &+= 1   // invalidate any in-flight callbacks from this stream
     }
 
     private func ingest(_ chunk: String) {
