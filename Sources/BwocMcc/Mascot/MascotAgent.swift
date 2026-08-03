@@ -487,6 +487,12 @@ final class MascotAgent: NSObject {
     /// Poll the agent's newest inbox line; speak it and perk up on a new message.
     private func pollMessages() {
         guard let agentID else { return }
+        // Skip the `bwoc inbox` subprocess when the fleet snapshot (already
+        // refreshed centrally, no extra process) says this agent has nothing
+        // unread. Without this, every agent mascot spawns a `bwoc` every 4s —
+        // N launches/tick serialized through the single BwocCli actor even when
+        // all inboxes are empty (the common case). Poll only when there's news.
+        if let status = statusProvider?(), status.unread == 0 { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
             guard let snap = try? await BwocCli.shared.inbox(agent: agentID, limit: 1),
