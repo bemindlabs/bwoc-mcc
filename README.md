@@ -39,8 +39,9 @@ workflow.
   menu bar.
 - 💬 **Native chat windows** — the chat action opens a
   [`bwoc-chat`](https://github.com/bemindlabs/bwoc-chat) egui window for
-  harness-backed agents (`ollama` / `openai-compatible`); vendor-CLI agents
-  fall back to `bwoc chat` in Terminal.
+  harness-backed agents (`ollama` / `openai-compatible` / `claude` / `anthropic`
+  — an all-Claude window drives `claude` via subscription auth with
+  `--claude-code`); vendor-CLI agents fall back to `bwoc chat` in Terminal.
 - 🏠 **Workspace summary** — workspace path + total agents, always visible.
 - 🙋 **Approval console** — human-in-the-loop supervision. When a headless fleet
   agent (run with `--approval-channel`) hits an `ask`-mode tool with no TTY, the
