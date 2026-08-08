@@ -372,6 +372,9 @@ private struct ApprovalRow: View {
                     Label("Deny", systemImage: "xmark").font(.caption2)
                 }
                 .controlSize(.small)
+                // Esc denies — a fail-safe-aligned keyboard default. Approve
+                // deliberately has NO keyboard shortcut (see below).
+                .keyboardShortcut(.cancelAction)
                 Button { onDecide(req, true, true) } label: {
                     Text("Always").font(.caption2)
                 }
@@ -383,7 +386,11 @@ private struct ApprovalRow: View {
                 }
                 .controlSize(.small)
                 .tint(.green)
-                .keyboardShortcut(.defaultAction)
+                // NO .keyboardShortcut(.defaultAction): the approval queue is a
+                // fail-safe-DENY gate for gated/untrusted tool calls. Binding
+                // Enter to Approve let a stray Return (the popover is key on
+                // open) grant a call — an inverted fail-safe. Approving is a
+                // deliberate click only.
             }
         }
         .padding(6)
