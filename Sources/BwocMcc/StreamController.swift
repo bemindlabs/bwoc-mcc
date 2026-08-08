@@ -1,6 +1,31 @@
 import Foundation
 import BwocMccCore
 
+/// Grace between SIGTERM and SIGKILL for stream children.
+private let streamTerminateGrace: Double = 2.0
+
+/// Carry a non-Sendable value into a detached thread. Safe here: the boxed
+/// `Process` is only read (`isRunning` / `processIdentifier`), never mutated.
+private struct UncheckedBox<T>: @unchecked Sendable {
+    let value: T
+    init(_ v: T) { value = v }
+}
+
+/// SIGTERM, then SIGKILL after a grace if the child ignored it (blocked on a
+/// lock / signal-masked) — mirrors `BwocCli`'s escalation so a long-lived stream
+/// child (`bwoc inbox --watch` / `log -f`) can't survive as an orphan. The grace
+/// wait runs on a detached thread (non-blocking); re-checking the *specific*
+/// `Process.isRunning` avoids pid-reuse hazards.
+func escalateTerminate(_ p: Process) {
+    guard p.isRunning else { return }
+    p.terminate()
+    let box = UncheckedBox(p)
+    Thread.detachNewThread {
+        Thread.sleep(forTimeInterval: streamTerminateGrace)
+        if box.value.isRunning { kill(box.value.processIdentifier, SIGKILL) }
+    }
+}
+
 /// Tracks live stream child processes so they can be killed when the app quits.
 /// macOS does not reap a parent's children automatically, and
 /// `applicationWillTerminate` may run before SwiftUI tears down the detail
@@ -27,7 +52,17 @@ final class StreamRegistry: @unchecked Sendable {
         let procs = Array(table.values)
         table.removeAll()
         lock.unlock()
+        // SIGTERM all, then a bounded synchronous grace and SIGKILL for any
+        // survivor. Synchronous (not the detached escalation) because this runs
+        // at app quit, where a detached thread may not get to run before the
+        // process image is torn down — leaving the orphan the registry exists to
+        // prevent. A ≤grace pause at quit is an acceptable trade for that.
         for p in procs where p.isRunning { p.terminate() }
+        let deadline = Date().addingTimeInterval(streamTerminateGrace)
+        while procs.contains(where: { $0.isRunning }) && Date() < deadline {
+            usleep(50_000)
+        }
+        for p in procs where p.isRunning { kill(p.processIdentifier, SIGKILL) }
     }
 }
 
@@ -103,7 +138,7 @@ final class StreamController: ObservableObject {
     func stop() {
         if let process {
             (process.standardOutput as? Pipe)?.fileHandleForReading.readabilityHandler = nil
-            if process.isRunning { process.terminate() }
+            escalateTerminate(process) // SIGTERM → SIGKILL if it lingers
             StreamRegistry.shared.unregister(process)
         }
         process = nil
@@ -133,7 +168,7 @@ final class StreamController: ObservableObject {
 
     deinit {
         if let process {
-            if process.isRunning { process.terminate() }
+            escalateTerminate(process) // SIGTERM → SIGKILL if it lingers
             StreamRegistry.shared.unregister(process)
         }
     }
