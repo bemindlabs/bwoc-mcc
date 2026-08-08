@@ -66,7 +66,12 @@ jobs:
           V="${{ steps.bump.outputs.version }}"
           gh release create "v$V" --title "v$V" --generate-notes "${{ steps.bundle.outputs.zip }}"
 
+      # The cask bump runs AFTER the irreversible tag/release push, so a missing
+      # or expired HOMEBREW_TAP_TOKEN must not fail the run (which would mask a
+      # successful release as red — issue #10). Guard both steps on the secret;
+      # a final step prints a manual-bump notice when it's absent.
       - name: Checkout Homebrew tap
+        if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: bemindlabs/homebrew-tap
@@ -74,6 +79,7 @@ jobs:
           path: tap
 
       - name: Bump Homebrew cask
+        if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
         run: |
           V="${{ steps.bump.outputs.version }}"
           SHA="${{ steps.bundle.outputs.sha }}"
@@ -83,3 +89,18 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "bwoc-mcc: bump cask to v$V"
           git push
+
+      - name: Cask bump skipped (no token)
+        if: ${{ secrets.HOMEBREW_TAP_TOKEN == '' }}
+        run: |
+          V="${{ steps.bump.outputs.version }}"
+          echo "::warning::HOMEBREW_TAP_TOKEN not set — release v$V shipped, but the Homebrew cask was NOT auto-bumped."
+          {
+            echo "### ⚠️ Homebrew cask not bumped"
+            echo "\`HOMEBREW_TAP_TOKEN\` is unset, so the cask auto-bump was skipped (the release itself succeeded)."
+            echo ""
+            echo "Set the secret (a PAT with \`contents: write\` on bemindlabs/homebrew-tap), or bump manually:"
+            echo "\`\`\`sh"
+            echo "scripts/update-cask.sh Casks/bwoc-mcc.rb $V <sha256-of-zip>"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
