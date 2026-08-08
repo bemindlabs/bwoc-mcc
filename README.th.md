@@ -34,13 +34,14 @@ terminal เลยค่ะ
   backend, จำนวน inbox; รีเฟรชอัตโนมัติทุก 5 วินาที
 - 🟢 **Running vs idle** — จุดสีต่อแถวสะท้อน `bwoc sessions`
 - 📥 **Badge inbox** — แสดงจำนวนข้อความค้างเป็น badge inline; คลิกเพื่อดู
-  พรีวิว *(วางแผน)*
+  พรีวิวข้อความแบบ click-through
 - ⚡ **Quick action** — spawn / chat / stop / start / supervise โดยไม่ต้องออกจาก
   menu bar
 - 💬 **หน้าต่าง chat แบบ native** — ปุ่ม chat เปิดหน้าต่าง egui ของ
   [`bwoc-chat`](https://github.com/bemindlabs/bwoc-chat) ให้เอเจนต์ที่ใช้ harness
-  (`ollama` / `openai-compatible`); เอเจนต์ backend แบบ vendor-CLI จะ fall back ไป
-  `bwoc chat` ใน Terminal
+  (`ollama` / `openai-compatible` / `claude` / `anthropic` — หน้าต่างที่เป็น Claude
+  ล้วนขับ `claude` ผ่าน subscription auth ด้วย `--claude-code`); เอเจนต์ backend แบบ
+  vendor-CLI จะ fall back ไป `bwoc chat` ใน Terminal
 - 🏠 **สรุป workspace** — path workspace + จำนวนเอเจนต์รวม, เห็นตลอด
 - 🙋 **Approval console** — human-in-the-loop supervision. เมื่อเอเจนต์ fleet แบบ
   headless (รันด้วย `--approval-channel`) ชนเครื่องมือโหมด `ask` โดยไม่มี TTY,
@@ -48,6 +49,10 @@ terminal เลยค่ะ
   พร้อมปุ่ม **Approve / Deny / Always**. จุดสีส้มบนดอกบัวแจ้งว่ามีคำขอค้าง. คำตัดสิน
   เปลี่ยนได้แค่จาก would-be deny → allow ที่คนอนุมัติ; ถ้า timeout จะ fall back ไป
   fail-safe ของ harness
+- 🐾 **Desktop mascot** — ปล่อย agent-pet เดินเล่นบนเดสก์ท็อป: sprite ตัวเล็ก
+  เดินอิสระที่อ่านสถานะ fleet สด ๆ (running / unread / scrum blocker), มีป้ายชื่อ
+  agent id และเปลี่ยน agent ที่ผูกได้จากเมนูคลิกขวา สร้างได้ทั้งแบบทั่วไปหรือผูกกับ
+  agent ตัวใดตัวหนึ่ง
 - 🪶 **Native + เบา** — ใช้ SwiftUI `MenuBarExtra` ล้วน ๆ ไม่มี Electron
   ไม่มี daemon เพิ่มเติมนอกจาก `bwoc` เอง
 
