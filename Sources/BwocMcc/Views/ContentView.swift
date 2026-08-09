@@ -480,6 +480,7 @@ private struct AgentRow: View {
     @State private var expanded = false
     @State private var messages: [InboxMessage] = []
     @State private var loadingInbox = false
+    @State private var watchError: String? = nil
     @ObservedObject private var mascots = MascotManager.shared
 
     var body: some View {
@@ -618,12 +619,27 @@ private struct AgentRow: View {
                     }
                 }
                 Button {
-                    Task { try? await BwocCli.shared.openInboxWatch(agent: agent.id) }
+                    Task {
+                        do {
+                            try await BwocCli.shared.openInboxWatch(agent: agent.id)
+                            watchError = nil
+                        } catch {
+                            // Was `try?` — a failed Terminal launch (missing app,
+                            // binary not found) vanished silently. Surface it.
+                            watchError = "watch failed: \(error.localizedDescription)"
+                        }
+                    }
                 } label: {
                     Label("Watch in Terminal", systemImage: "terminal")
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                if let watchError {
+                    Text(watchError)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                }
             }
         }
         .padding(.leading, 16)
