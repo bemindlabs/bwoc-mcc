@@ -41,7 +41,7 @@ jobs:
         run: swift run CoreChecks
 
       - name: Read version
-        id: bump
+        id: version
         run: |
           V="$(tr -d '[:space:]' <VERSION)"
           if git rev-parse -q --verify "refs/tags/v$V" >/dev/null; then
@@ -60,7 +60,7 @@ jobs:
 
       - name: Tag & push
         run: |
-          V="${{ steps.bump.outputs.version }}"
+          V="${{ steps.version.outputs.version }}"
           git tag -a "v$V" -m "bwoc-mcc v$V"
           git push origin "v$V"
 
@@ -68,7 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          V="${{ steps.bump.outputs.version }}"
+          V="${{ steps.version.outputs.version }}"
           gh release create "v$V" --title "v$V" --generate-notes "${{ steps.bundle.outputs.zip }}"
 
       # The cask bump runs AFTER the irreversible tag/release push, so a missing
@@ -86,7 +86,7 @@ jobs:
       - name: Bump Homebrew cask
         if: ${{ env.HAS_TAP_TOKEN == 'true' }}
         run: |
-          V="${{ steps.bump.outputs.version }}"
+          V="${{ steps.version.outputs.version }}"
           SHA="${{ steps.bundle.outputs.sha }}"
           scripts/update-cask.sh tap/Casks/bwoc-mcc.rb "$V" "$SHA"
           cd tap
@@ -98,7 +98,7 @@ jobs:
       - name: Cask bump skipped (no token)
         if: ${{ env.HAS_TAP_TOKEN != 'true' }}
         run: |
-          V="${{ steps.bump.outputs.version }}"
+          V="${{ steps.version.outputs.version }}"
           echo "::warning::HOMEBREW_TAP_TOKEN not set — release v$V shipped, but the Homebrew cask was NOT auto-bumped."
           {
             echo "### ⚠️ Homebrew cask not bumped"
