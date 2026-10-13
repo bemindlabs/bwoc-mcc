@@ -25,6 +25,10 @@ concurrency:
 jobs:
   release:
     runs-on: macos-14
+    env:
+      # `secrets` is not available in a step-level `if`, so the presence of the
+      # token is surfaced here as a plain string the steps can test.
+      HAS_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,7 +75,7 @@ jobs:
       # successful release as red — issue #10). Guard both steps on the secret;
       # a final step prints a manual-bump notice when it's absent.
       - name: Checkout Homebrew tap
-        if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+        if: ${{ env.HAS_TAP_TOKEN == 'true' }}
         uses: actions/checkout@v4
         with:
           repository: bemindlabs/homebrew-tap
@@ -79,7 +83,7 @@ jobs:
           path: tap
 
       - name: Bump Homebrew cask
-        if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+        if: ${{ env.HAS_TAP_TOKEN == 'true' }}
         run: |
           V="${{ steps.bump.outputs.version }}"
           SHA="${{ steps.bundle.outputs.sha }}"
@@ -91,7 +95,7 @@ jobs:
           git push
 
       - name: Cask bump skipped (no token)
-        if: ${{ secrets.HOMEBREW_TAP_TOKEN == '' }}
+        if: ${{ env.HAS_TAP_TOKEN != 'true' }}
         run: |
           V="${{ steps.bump.outputs.version }}"
           echo "::warning::HOMEBREW_TAP_TOKEN not set — release v$V shipped, but the Homebrew cask was NOT auto-bumped."
