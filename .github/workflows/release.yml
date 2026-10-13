@@ -1,19 +1,17 @@
 name: release
 
-# Pump the version (major/minor/patch), build a universal app bundle,
-# publish a GitHub Release, and bump the Homebrew cask — all in one click.
+# Release the version already in `VERSION` on main: build a universal app
+# bundle, tag it, publish a GitHub Release, and bump the Homebrew cask.
+#
+# The version is bumped beforehand through a normal PR
+# (`scripts/bump-version.sh {patch|minor|major}`). `main` is protected, so this
+# workflow never pushes to it — it only pushes the tag.
 #
 # Requires repo secret HOMEBREW_TAP_TOKEN: a PAT (or fine-grained token) with
 # `contents: write` on bemindlabs/homebrew-tap.
 
 on:
   workflow_dispatch:
-    inputs:
-      bump:
-        description: "Version bump level"
-        type: choice
-        options: [patch, minor, major]
-        default: patch
 
 permissions:
   contents: write
@@ -42,9 +40,15 @@ jobs:
       - name: Run checks
         run: swift run CoreChecks
 
-      - name: Bump version
-        id: bump
-        run: echo "version=$(scripts/bump-version.sh '${{ inputs.bump }}')" >> "$GITHUB_OUTPUT"
+      - name: Read version
+        id: version
+        run: |
+          V="$(tr -d '[:space:]' <VERSION)"
+          if git rev-parse -q --verify "refs/tags/v$V" >/dev/null; then
+            echo "::error::v$V is already tagged — bump VERSION in a PR first (scripts/bump-version.sh)."
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
 
       - name: Build universal app bundle
         id: bundle
@@ -54,20 +58,17 @@ jobs:
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Commit, tag & push
+      - name: Tag & push
         run: |
-          V="${{ steps.bump.outputs.version }}"
-          git add VERSION
-          git commit -m "release: v$V"
+          V="${{ steps.version.outputs.version }}"
           git tag -a "v$V" -m "bwoc-mcc v$V"
-          git push origin HEAD:main
           git push origin "v$V"
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          V="${{ steps.bump.outputs.version }}"
+          V="${{ steps.version.outputs.version }}"
           gh release create "v$V" --title "v$V" --generate-notes "${{ steps.bundle.outputs.zip }}"
 
       # The cask bump runs AFTER the irreversible tag/release push, so a missing
@@ -85,7 +86,7 @@ jobs:
       - name: Bump Homebrew cask
         if: ${{ env.HAS_TAP_TOKEN == 'true' }}
         run: |
-          V="${{ steps.bump.outputs.version }}"
+          V="${{ steps.version.outputs.version }}"
           SHA="${{ steps.bundle.outputs.sha }}"
           scripts/update-cask.sh tap/Casks/bwoc-mcc.rb "$V" "$SHA"
           cd tap
@@ -97,7 +98,7 @@ jobs:
       - name: Cask bump skipped (no token)
         if: ${{ env.HAS_TAP_TOKEN != 'true' }}
         run: |
-          V="${{ steps.bump.outputs.version }}"
+          V="${{ steps.version.outputs.version }}"
           echo "::warning::HOMEBREW_TAP_TOKEN not set — release v$V shipped, but the Homebrew cask was NOT auto-bumped."
           {
             echo "### ⚠️ Homebrew cask not bumped"
