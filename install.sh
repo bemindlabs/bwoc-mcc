@@ -47,9 +47,9 @@ cat > "$STAGE/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "▸ codesigning (ad-hoc)…"
-# No --deep: the only nested "bundle" is the SwiftPM resource bundle, a flat
-# data dir (no Contents/) that codesign --deep rejects as malformed. It's data,
-# not code — sealing it as a resource of the app signature is enough.
+# No --deep: the app has no nested code bundles. The mascot atlas is plain data
+# copied into Contents/Resources (the SwiftPM target excludes Resources/) — it's
+# sealed as a resource of the app signature, which is enough.
 codesign --force --sign - "$STAGE" >/dev/null
 
 echo "▸ installing → ${DEST}"

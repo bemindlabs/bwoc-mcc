@@ -528,7 +528,8 @@ final class MascotAgent: NSObject {
     /// (so a point in the gap between misaligned monitors resolves to a real
     /// display instead of snapping to `main`), else `main`. `nil` only when
     /// there are **no** active displays (clamshell / all asleep / locked) — the
-    /// callers no-op in that case rather than crash (never index `screens[0]`).
+    /// callers then skip their screen-dependent geometry (keeping the last
+    /// `center`) rather than crash (never index `screens[0]`).
     private func screen(near p: CGPoint) -> NSScreen? {
         if let s = NSScreen.screens.first(where: { $0.frame.contains(p) }) { return s }
         return NSScreen.screens.min {

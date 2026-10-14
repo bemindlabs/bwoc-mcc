@@ -40,7 +40,7 @@ final class ApprovalModel: ObservableObject {
             lastError = nil
         } else {
             lastError = "Couldn't record the decision for \(req.tool) — it was NOT delivered "
-                + "(the request may have expired, or the write failed). It stays in the queue."
+                + "(the request may have expired, or the write failed). If it is still pending, it stays in the queue."
         }
         return ok
     }

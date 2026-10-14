@@ -156,7 +156,7 @@ inboxes, and (soon) scrum state. Out of scope:
 
 **Alpha** — the scaffold builds, launches, and renders the live fleet from
 `bwoc list --json`. The `BWOC-EPIC-5` workstream has landed: quick actions
-(`BwocCli.Action` / `runAction`), the sessions view (`SessionsSection`), the
+(`AgentAction` / `BwocCli.perform`), the sessions view (`SessionsSection`), the
 inbox preview (`AgentDetailWindow` streaming `StreamKind.inbox`), and scrum
 integration (`ScrumStrip` / `ScrumReader`) all ship. The desktop mascot is in.
 

@@ -81,8 +81,9 @@ public struct ApprovalInbox: Sendable {
             .sorted { $0.tsMs < $1.tsMs }
     }
 
-    /// A safe single filename component: non-empty, not hidden, no path
-    /// separators or `..`. Guards the untrusted `id` (from a pending file's JSON
+    /// A safe single filename component: non-empty, no leading `.` (so not
+    /// hidden, and never `.` or `..`), no path separators or NUL. Inner dots
+    /// (`a..b`) are allowed — they cannot leave the directory. Guards the untrusted `id` (from a pending file's JSON
     /// body) before it is spliced into a path under `decided/`.
     public static func isSafeId(_ id: String) -> Bool {
         !id.isEmpty

@@ -46,8 +46,9 @@ cat >"$STAGE/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "▸ codesigning (ad-hoc)…" >&2
-# No --deep: the nested SwiftPM resource bundle is a flat data dir (no Contents/)
-# that codesign --deep rejects; it's sealed as a resource of the app signature.
+# No --deep: the app has no nested code bundles. The mascot atlas is plain data
+# copied into Contents/Resources (the SwiftPM target excludes Resources/), so it
+# is sealed as a resource of the app signature.
 codesign --force --sign - "$STAGE" 1>&2
 
 ZIP="${DIST}/${APP_NAME}-${VER}-universal.zip"

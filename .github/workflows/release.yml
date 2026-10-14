@@ -99,6 +99,7 @@ jobs:
         if: ${{ env.HAS_TAP_TOKEN != 'true' }}
         run: |
           V="${{ steps.version.outputs.version }}"
+          SHA="${{ steps.bundle.outputs.sha }}"
           echo "::warning::HOMEBREW_TAP_TOKEN not set — release v$V shipped, but the Homebrew cask was NOT auto-bumped."
           {
             echo "### ⚠️ Homebrew cask not bumped"
@@ -106,6 +107,8 @@ jobs:
             echo ""
             echo "Set the secret (a PAT with \`contents: write\` on bemindlabs/homebrew-tap), or bump manually:"
             echo "\`\`\`sh"
-            echo "scripts/update-cask.sh Casks/bwoc-mcc.rb $V <sha256-of-zip>"
+            echo "git clone https://github.com/bemindlabs/homebrew-tap tap"
+            echo "scripts/update-cask.sh tap/Casks/bwoc-mcc.rb $V $SHA"
+            echo "git -C tap commit -am \"bwoc-mcc: bump cask to v$V\" && git -C tap push"
             echo "\`\`\`"
           } >> "$GITHUB_STEP_SUMMARY"
